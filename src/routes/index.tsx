@@ -863,33 +863,86 @@ function Dashboard() {
             </button>
             {whyNotOpen && (
               <div className="space-y-3 p-4">
-                <ul className="space-y-2">
-                  {ruleJustifications.map((text, idx) => (
-                    <li
-                      key={idx}
-                      className="flex gap-2 rounded-lg bg-elevated p-3 text-xs leading-relaxed text-muted-foreground"
-                    >
-                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-warning/15 text-[10px] font-semibold text-warning">
-                        {idx + 1}
-                      </span>
-                      <span>{text}</span>
-                    </li>
-                  ))}
-                </ul>
-                {activeFlag && activeMetric && (
-                  <div className="rounded-lg bg-elevated p-3">
-                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                      Selected flag · {activeMetric.label}
-                    </div>
-                    <div className="mt-1 text-sm font-semibold">{activeFlag.title}</div>
-                    <div className="mt-1 flex items-baseline gap-2">
-                      <span className="text-lg font-semibold">{activeMetric.value}</span>
-                      <span className="text-[11px] text-muted-foreground">
-                        {activeMetric.delta}
-                      </span>
-                    </div>
-                  </div>
+                {uiFlags.length === 0 && (
+                  <p className="rounded-lg bg-elevated p-3 text-xs text-muted-foreground">
+                    No risk flags triggered for this deal.
+                  </p>
                 )}
+                <ul className="space-y-3">
+                  {uiFlags.map((f) => {
+                    const sev =
+                      f.severity === "high"
+                        ? {
+                            label: "HIGH RISK",
+                            text: "text-destructive",
+                            bg: "bg-destructive/10",
+                            ring: "ring-destructive/40",
+                            chip: "bg-destructive/15 text-destructive",
+                          }
+                        : f.severity === "med"
+                          ? {
+                              label: "MEDIUM RISK",
+                              text: "text-warning",
+                              bg: "bg-warning/5",
+                              ring: "ring-warning/30",
+                              chip: "bg-warning/15 text-warning",
+                            }
+                          : {
+                              label: "LOW RISK",
+                              text: "text-info",
+                              bg: "bg-info/5",
+                              ring: "ring-info/30",
+                              chip: "bg-info/15 text-info",
+                            };
+                    const isActive = activeFlag?.id === f.id;
+                    return (
+                      <li key={f.id}>
+                        <button
+                          onClick={() => {
+                            setSelectedFlag(isActive ? "" : f.id);
+                            setSelectedMetric(f.linkedMetric);
+                          }}
+                          className={`w-full rounded-lg p-3 text-left ring-1 transition ${sev.bg} ${sev.ring} ${isActive ? "ring-2" : "hover:ring-2"}`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${sev.chip}`}
+                            >
+                              {sev.label}
+                            </span>
+                            <AlertTriangle className={`h-3.5 w-3.5 ${sev.text}`} />
+                          </div>
+                          <h3 className="mt-2 text-sm font-semibold text-foreground">
+                            {f.title}
+                          </h3>
+                          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                            {f.body}
+                          </p>
+                          <div className="mt-2.5 grid gap-2 text-[11px]">
+                            <div className="rounded-md bg-background/50 p-2">
+                              <div className="flex items-center gap-1.5 text-muted-foreground">
+                                <Target className="h-3 w-3" />
+                                <span className="uppercase tracking-wide">Business impact</span>
+                              </div>
+                              <p className="mt-1 leading-relaxed text-foreground/90">
+                                {businessImpactForFlag(f)}
+                              </p>
+                            </div>
+                            <div className="rounded-md bg-background/50 p-2">
+                              <div className="flex items-center gap-1.5 text-muted-foreground">
+                                <Lightbulb className="h-3 w-3" />
+                                <span className="uppercase tracking-wide">Recommendation</span>
+                              </div>
+                              <p className="mt-1 leading-relaxed text-foreground/90">
+                                {recommendationForFlag(f)}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             )}
           </div>
