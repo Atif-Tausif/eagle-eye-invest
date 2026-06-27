@@ -19,6 +19,12 @@ import {
   ShieldAlert,
   Flag,
   Activity,
+  Loader2,
+  CheckCircle2,
+  Sparkles,
+  Target,
+  Lightbulb,
+  Gauge,
 } from "lucide-react";
 import { DealAiChat } from "@/components/deal-ai-chat";
 import { NegotiationOpportunities } from "@/components/negotiation-opportunities";
