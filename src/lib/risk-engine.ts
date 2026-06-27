@@ -40,7 +40,18 @@ export interface DealPayload {
       trailing_12mo_change_bps?: number;
     };
     construction_pipeline?: {
-      summary?: { delivering_through_2027_units?: number; total_pipeline_units?: number };
+      submarket?: string;
+      summary?: {
+        delivering_through_2027_units?: number;
+        total_pipeline_units?: number;
+        project_count?: number;
+      };
+      projects?: Array<{
+        project_name: string;
+        units: number;
+        status: string;
+        expected_delivery: string;
+      }>;
     };
   };
   derived_metrics?: {
