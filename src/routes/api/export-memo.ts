@@ -1,5 +1,11 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { evaluateRiskFlags, scoreDeal, calculateDscr, type DealPayload, type RiskFlag } from "@/lib/risk-engine";
+import {
+  evaluateRiskFlags,
+  scoreDeal,
+  calculateDscr,
+  type DealPayload,
+  type RiskFlag,
+} from "@/lib/risk-engine";
 import dealDataRaw from "../../../backend/data/current_deal.json";
 
 const dealData = dealDataRaw as DealPayload;
@@ -23,7 +29,12 @@ function verdictFromScore(score: number): { label: string; color: string } {
   return { label: "GO", color: "#16a34a" };
 }
 
-function buildMemoHtml(deal: DealPayload, flags: RiskFlag[], score: number, overrides: Record<string, unknown>): string {
+function buildMemoHtml(
+  deal: DealPayload,
+  flags: RiskFlag[],
+  score: number,
+  overrides: Record<string, unknown>,
+): string {
   const meta = deal.property_metadata ?? {};
   const market = deal.market_context ?? {};
   const derived = deal.derived_metrics ?? {};
@@ -39,25 +50,43 @@ function buildMemoHtml(deal: DealPayload, flags: RiskFlag[], score: number, over
   const proForma = derived.pro_forma_rent_growth_pct ?? 5.8;
   const submktAvg = rent.trailing_3yr_cagr_pct ?? 0;
   const rentGap = Math.round((proForma - submktAvg) * 10) / 10;
-  const pipelineUnits = pipeline.delivering_through_2027_units ?? pipeline.total_pipeline_units ?? 0;
+  const pipelineUnits =
+    pipeline.delivering_through_2027_units ?? pipeline.total_pipeline_units ?? 0;
   const submarket = market.submarket ?? "Submarket";
   const units = meta.unit_count ?? 0;
 
-  const verdictOverride = typeof overrides.verdict === "string" ? overrides.verdict.toUpperCase() : null;
+  const verdictOverride =
+    typeof overrides.verdict === "string" ? overrides.verdict.toUpperCase() : null;
   const analystNotes = typeof overrides.analyst_notes === "string" ? overrides.analyst_notes : null;
   const { label: verdictLabel, color: verdictColor } = verdictOverride
-    ? { label: verdictOverride, color: verdictOverride === "GO" ? "#16a34a" : verdictOverride === "NO-GO" ? "#dc2626" : "#d97706" }
+    ? {
+        label: verdictOverride,
+        color:
+          verdictOverride === "GO"
+            ? "#16a34a"
+            : verdictOverride === "NO-GO"
+              ? "#dc2626"
+              : "#d97706",
+      }
     : verdictFromScore(score);
 
-  const now = new Date().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
+  const now = new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 
   const flagsHtml = flags.length
-    ? flags.map(f => `
+    ? flags
+        .map(
+          (f) => `
         <div style="margin:6px 0;padding:8px 12px;border-left:3px solid ${f.severity === "Critical Risk" ? "#dc2626" : "#d97706"};background:#fef2f2;border-radius:0 4px 4px 0;">
           <strong style="color:${f.severity === "Critical Risk" ? "#dc2626" : "#d97706"}">[${f.severity}]</strong>
           <strong> ${f.title}</strong><br/>
           <span style="font-size:13px;color:#475569">${f.justification}</span>
-        </div>`).join("")
+        </div>`,
+        )
+        .join("")
     : `<p style="color:#16a34a">No risk flags triggered.</p>`;
 
   const sections = [
@@ -118,18 +147,26 @@ function buildMemoHtml(deal: DealPayload, flags: RiskFlag[], score: number, over
     },
   ];
 
-  const sectionsHtml = sections.map(sec => `
+  const sectionsHtml = sections
+    .map(
+      (sec) => `
     <div style="margin-top:32px;page-break-inside:avoid;">
       <h2 style="font-size:18px;color:#1e293b;border-bottom:2px solid #2563eb;padding-bottom:6px;margin-bottom:12px">${sec.title}</h2>
       <p style="font-size:13px;color:#1e293b;line-height:1.6;margin-bottom:14px">${sec.body}</p>
       <table style="width:100%;border-collapse:collapse;font-size:12px;margin-bottom:8px">
-        ${sec.metrics.map(([k, v]) => `
+        ${sec.metrics
+          .map(
+            ([k, v]) => `
           <tr>
             <td style="padding:6px 10px;background:#f8fafc;border:1px solid #e2e8f0;font-weight:600;color:#1e293b;width:38%">${k}</td>
             <td style="padding:6px 10px;background:#f8fafc;border:1px solid #e2e8f0;color:#475569">${v}</td>
-          </tr>`).join("")}
+          </tr>`,
+          )
+          .join("")}
       </table>
-    </div>`).join("");
+    </div>`,
+    )
+    .join("");
 
   return `<!DOCTYPE html>
 <html lang="en">

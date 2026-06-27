@@ -47,38 +47,39 @@ export function DealAiChat() {
     if (open) inputRef.current?.focus();
   }, [open]);
 
-  const sendMessage = useCallback(async (text: string) => {
-    const trimmed = text.trim();
-    if (!trimmed || loading) return;
+  const sendMessage = useCallback(
+    async (text: string) => {
+      const trimmed = text.trim();
+      if (!trimmed || loading) return;
 
-    setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
-    setInput("");
-    setLoading(true);
+      setMessages((prev) => [...prev, { role: "user", content: trimmed }]);
+      setInput("");
+      setLoading(true);
 
-    try {
-      const res = await fetch("/api/chat", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: trimmed }),
-      });
-      const data = (await res.json()) as { reply?: string; error?: string };
-      if (!res.ok) throw new Error(data.error ?? "Chat request failed");
-      setMessages((prev) => [...prev, { role: "assistant", content: data.reply ?? "" }]);
-    } catch (err) {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content:
-            err instanceof Error
-              ? `Sorry — ${err.message}`
-              : "Something went wrong. Try again.",
-        },
-      ]);
-    } finally {
-      setLoading(false);
-    }
-  }, [loading]);
+      try {
+        const res = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ message: trimmed }),
+        });
+        const data = (await res.json()) as { reply?: string; error?: string };
+        if (!res.ok) throw new Error(data.error ?? "Chat request failed");
+        setMessages((prev) => [...prev, { role: "assistant", content: data.reply ?? "" }]);
+      } catch (err) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: "assistant",
+            content:
+              err instanceof Error ? `Sorry — ${err.message}` : "Something went wrong. Try again.",
+          },
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [loading],
+  );
 
   const showSuggestions = messages.length <= 1 && !loading;
 
@@ -107,14 +108,14 @@ export function DealAiChat() {
             </Button>
           </div>
 
-          <div ref={scrollRef} className="flex max-h-[22rem] min-h-[16rem] flex-col gap-3 overflow-y-auto p-4">
+          <div
+            ref={scrollRef}
+            className="flex max-h-[22rem] min-h-[16rem] flex-col gap-3 overflow-y-auto p-4"
+          >
             {messages.map((msg, idx) => (
               <div
                 key={idx}
-                className={cn(
-                  "flex gap-2",
-                  msg.role === "user" ? "justify-end" : "justify-start",
-                )}
+                className={cn("flex gap-2", msg.role === "user" ? "justify-end" : "justify-start")}
               >
                 {msg.role === "assistant" && (
                   <div className="mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-md bg-primary/15">
@@ -129,9 +130,7 @@ export function DealAiChat() {
                       : "bg-elevated text-muted-foreground",
                   )}
                 >
-                  {msg.role === "assistant"
-                    ? renderInlineMarkdown(msg.content)
-                    : msg.content}
+                  {msg.role === "assistant" ? renderInlineMarkdown(msg.content) : msg.content}
                 </div>
               </div>
             ))}

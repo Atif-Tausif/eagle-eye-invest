@@ -78,17 +78,37 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
       { charSet: "utf-8" },
       { name: "viewport", content: "width=device-width, initial-scale=1" },
       { title: "Lovable App" },
-      { name: "description", content: "Multifamily Insights Hub is a web app for multifamily real estate investment deal screening." },
+      {
+        name: "description",
+        content:
+          "Multifamily Insights Hub is a web app for multifamily real estate investment deal screening.",
+      },
       { name: "author", content: "Lovable" },
       { property: "og:title", content: "Lovable App" },
-      { property: "og:description", content: "Multifamily Insights Hub is a web app for multifamily real estate investment deal screening." },
+      {
+        property: "og:description",
+        content:
+          "Multifamily Insights Hub is a web app for multifamily real estate investment deal screening.",
+      },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary" },
       { name: "twitter:site", content: "@Lovable" },
       { name: "twitter:title", content: "Lovable App" },
-      { name: "twitter:description", content: "Multifamily Insights Hub is a web app for multifamily real estate investment deal screening." },
-      { property: "og:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/af8150bc-dc96-4856-a78b-8c871497329a/id-preview-a12454d7--0ce089f8-6d92-4a6b-a911-8cc7e5f18663.lovable.app-1782577164776.png" },
-      { name: "twitter:image", content: "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/af8150bc-dc96-4856-a78b-8c871497329a/id-preview-a12454d7--0ce089f8-6d92-4a6b-a911-8cc7e5f18663.lovable.app-1782577164776.png" },
+      {
+        name: "twitter:description",
+        content:
+          "Multifamily Insights Hub is a web app for multifamily real estate investment deal screening.",
+      },
+      {
+        property: "og:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/af8150bc-dc96-4856-a78b-8c871497329a/id-preview-a12454d7--0ce089f8-6d92-4a6b-a911-8cc7e5f18663.lovable.app-1782577164776.png",
+      },
+      {
+        name: "twitter:image",
+        content:
+          "https://pub-bb2e103a32db4e198524a2e9ed8f35b4.r2.dev/af8150bc-dc96-4856-a78b-8c871497329a/id-preview-a12454d7--0ce089f8-6d92-4a6b-a911-8cc7e5f18663.lovable.app-1782577164776.png",
+      },
     ],
     links: [
       {

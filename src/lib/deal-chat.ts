@@ -1,8 +1,4 @@
-import {
-  calculateDscr,
-  type EnginePayload,
-  type RiskFlag,
-} from "@/lib/risk-engine";
+import { calculateDscr, type EnginePayload, type RiskFlag } from "@/lib/risk-engine";
 
 export interface ChatMessage {
   role: "user" | "assistant";
@@ -110,8 +106,7 @@ function summarizeOm(payload: EnginePayload): string {
   );
   const renoPerUnit = deal.derived_metrics?.reno_cost_per_unit_usd ?? 0;
   const submarket = deal.market_context?.submarket ?? "—";
-  const rentCagr =
-    deal.market_context?.rent_growth_trailing_3yr?.trailing_3yr_cagr_pct ?? 0;
+  const rentCagr = deal.market_context?.rent_growth_trailing_3yr?.trailing_3yr_cagr_pct ?? 0;
   const occ = deal.market_context?.submarket_occupancy?.average_occupancy_pct ?? 0;
   const pipeline =
     deal.market_context?.construction_pipeline?.summary?.delivering_through_2027_units ?? 0;
@@ -175,7 +170,9 @@ function dueDiligenceChecklist(payload: EnginePayload): string {
   ];
 
   for (const flag of flags) {
-    items.push(`**Flag follow-up (${flag.severity}):** ${flag.title} — ${flag.justification.split(".")[0]}.`);
+    items.push(
+      `**Flag follow-up (${flag.severity}):** ${flag.title} — ${flag.justification.split(".")[0]}.`,
+    );
   }
 
   return `**Due diligence priorities for this deal:**\n\n${items.map((item, i) => `${i + 1}. ${item}`).join("\n\n")}`;
@@ -211,8 +208,7 @@ function rentReply(payload: EnginePayload): string {
   const flag = payload.flags.find((f) => f.id.startsWith("rent"));
   if (flag) return `**Rent growth risk:** ${flag.justification}`;
   const submarket = payload.deal.market_context?.submarket ?? "submarket";
-  const cagr =
-    payload.deal.market_context?.rent_growth_trailing_3yr?.trailing_3yr_cagr_pct ?? 0;
+  const cagr = payload.deal.market_context?.rent_growth_trailing_3yr?.trailing_3yr_cagr_pct ?? 0;
   return `Pro-forma rent growth appears aligned with ${submarket}'s ${cagr.toFixed(1)}% trailing 3-year CAGR — no rent-premium flag triggered at current thresholds.`;
 }
 
@@ -222,7 +218,10 @@ function supplyReply(payload: EnginePayload): string {
   const projects = pipeline.projects ?? [];
   const list = projects
     .slice(0, 4)
-    .map((p) => `• **${p.project_name}** — ${p.units} units, ${p.status.replace(/_/g, " ")}, ${p.expected_delivery}`)
+    .map(
+      (p) =>
+        `• **${p.project_name}** — ${p.units} units, ${p.status.replace(/_/g, " ")}, ${p.expected_delivery}`,
+    )
     .join("\n");
   return `**Supply pipeline (${pipeline.submarket}):** ${pipeline.summary?.delivering_through_2027_units?.toLocaleString() ?? "—"} units delivering through 2027 across ${pipeline.summary?.project_count ?? projects.length} projects.
 

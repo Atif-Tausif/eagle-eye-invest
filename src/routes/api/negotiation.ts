@@ -1,5 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { evaluateNegotiationOpportunities, type NegotiationPayload } from "@/lib/negotiation-engine";
+import {
+  evaluateNegotiationOpportunities,
+  type NegotiationPayload,
+} from "@/lib/negotiation-engine";
 import dealDataRaw from "../../../backend/data/current_deal.json";
 
 async function loadNegotiationPayload(): Promise<NegotiationPayload> {

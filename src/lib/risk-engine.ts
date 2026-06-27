@@ -123,8 +123,7 @@ export function loanAmount(deal: DealPayload): number {
 }
 
 export function hasCapexBudget(deal: DealPayload): boolean {
-  const capex =
-    deal.financial_projections?.capital_expenditures?.interior_renovation_budget_usd;
+  const capex = deal.financial_projections?.capital_expenditures?.interior_renovation_budget_usd;
   return capex != null && Math.abs(capex) > 0;
 }
 
@@ -291,10 +290,7 @@ export function evaluateRiskFlags(deal: DealPayload, debtRate = DEFAULT_DEBT_RAT
 }
 
 export function scoreDeal(flags: RiskFlag[]): number {
-  const deductions = flags.reduce(
-    (sum, f) => sum + (SEVERITY_DEDUCTIONS[f.severity] ?? 0),
-    0,
-  );
+  const deductions = flags.reduce((sum, f) => sum + (SEVERITY_DEDUCTIONS[f.severity] ?? 0), 0);
   return Math.max(0, 100 - deductions);
 }
 

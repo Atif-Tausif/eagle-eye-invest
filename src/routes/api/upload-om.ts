@@ -1,8 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getMarketContext } from "@/lib/market-data";
+import { evaluateDeal } from "@/lib/risk-engine";
 
-const GROQ_API_KEY =
-  (typeof process !== "undefined" && process.env.GROQ_API_KEY);
+const GROQ_API_KEY = typeof process !== "undefined" && process.env.GROQ_API_KEY;
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "llama-3.3-70b-versatile";
 
@@ -15,10 +15,18 @@ async function extractPdfPages(bytes: Uint8Array): Promise<string[]> {
   // Disable the web worker — not available in Node.js
   (pdfjsLib as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc = "";
 
-  const loadingTask = (pdfjsLib as { getDocument: (opts: { data: Uint8Array }) => { promise: Promise<{
-    numPages: number;
-    getPage: (n: number) => Promise<{ getTextContent: () => Promise<{ items: Array<{ str?: string }> }> }>;
-  }> } }).getDocument({ data: bytes });
+  const loadingTask = (
+    pdfjsLib as {
+      getDocument: (opts: { data: Uint8Array }) => {
+        promise: Promise<{
+          numPages: number;
+          getPage: (
+            n: number,
+          ) => Promise<{ getTextContent: () => Promise<{ items: Array<{ str?: string }> }> }>;
+        }>;
+      };
+    }
+  ).getDocument({ data: bytes });
 
   const pdf = await loadingTask.promise;
   const pages: string[] = [];
@@ -54,6 +62,10 @@ function selectRelevantPages(pages: string[]): { cover: string; financials: stri
 // ---------------------------------------------------------------------------
 
 async function callGroq(userPrompt: string, retries = 4): Promise<string> {
+  if (!GROQ_API_KEY) {
+    throw new Error("GROQ_API_KEY is not configured");
+  }
+
   for (let attempt = 0; attempt < retries; attempt++) {
     const res = await fetch(GROQ_URL, {
       method: "POST",
@@ -98,12 +110,67 @@ async function callGroq(userPrompt: string, retries = 4): Promise<string> {
 // Extraction prompts
 // ---------------------------------------------------------------------------
 
+function parseMoney(value: string | undefined): number | null {
+  if (!value) return null;
+  const negative = /^\s*\(/.test(value) || /^\s*-/.test(value);
+  const cleaned = value.replace(/[^\d.]/g, "");
+  if (!cleaned) return null;
+  const parsed = Number.parseFloat(cleaned);
+  if (!Number.isFinite(parsed)) return null;
+  return Math.round(parsed) * (negative ? -1 : 1);
+}
+
+function extractMetadataWithRegex(text: string): {
+  property_name: string | null;
+  unit_count: number | null;
+  asset_type: string | null;
+  location: string | null;
+} {
+  const unitMatch = text.match(/(\d{2,5})\s*(?:-|\s)?\s*unit/i);
+  const assetMatch = text.match(/\b(apartment community|multifamily|garden apartments?)\b/i);
+  const locationMatch = text.match(
+    /\b([A-Z][A-Za-z .'-]+,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|IL|IN|IA|KS|KY|LA|MA|MD|ME|MI|MN|MO|MS|NC|ND|NE|NH|NJ|NM|NV|NY|OH|OK|OR|PA|SC|SD|TN|TX|UT|VA|VT|WA|WI|WV|WY))\b/,
+  );
+  const titleMatch =
+    text.match(/([A-Z][A-Za-z0-9&,' -]+(?:Apartment|Apartments|Community)[A-Za-z0-9&,' -]*)/) ??
+    text.match(/([A-Z][A-Za-z0-9&,' -]{12,80})/);
+
+  return {
+    property_name: titleMatch?.[1]?.trim() ?? null,
+    unit_count: unitMatch ? Number.parseInt(unitMatch[1], 10) : null,
+    asset_type: assetMatch?.[1] ?? (unitMatch ? "Apartment Community" : null),
+    location: locationMatch?.[1] ?? null,
+  };
+}
+
+function extractFinancialsWithRegex(text: string): {
+  net_operating_income_usd: number | null;
+  interior_renovation_budget_usd: number | null;
+} {
+  const money = String.raw`(\(?-?\$?\s*\d[\d,]*(?:\.\d+)?\)?)`;
+  const noiMatch =
+    text.match(new RegExp(`net\\s+operating\\s+income[^$()\\d-]{0,80}${money}`, "i")) ??
+    text.match(new RegExp(`\\bNOI\\b[^$()\\d-]{0,80}${money}`, "i"));
+  const renoMatch =
+    text.match(new RegExp(`interior\\s+renovation[^$()\\d-]{0,80}${money}`, "i")) ??
+    text.match(
+      new RegExp(`(?:renovation|capex|capital\\s+expenditure)[^$()\\d-]{0,80}${money}`, "i"),
+    );
+  const reno = parseMoney(renoMatch?.[1]);
+
+  return {
+    net_operating_income_usd: parseMoney(noiMatch?.[1]),
+    interior_renovation_budget_usd: reno == null ? null : -Math.abs(reno),
+  };
+}
+
 async function extractMetadata(coverText: string): Promise<{
   property_name: string | null;
   unit_count: number | null;
   asset_type: string | null;
   location: string | null;
 }> {
+  const fallback = extractMetadataWithRegex(coverText);
   const prompt = `Extract property metadata from this Offering Memorandum cover page text.
 
 Return JSON with exactly these keys:
@@ -119,9 +186,9 @@ ${coverText.slice(0, 4000)}`;
 
   const raw = await callGroq(prompt);
   try {
-    return JSON.parse(raw);
+    return { ...fallback, ...JSON.parse(raw) };
   } catch {
-    return { property_name: null, unit_count: null, asset_type: null, location: null };
+    return fallback;
   }
 }
 
@@ -129,6 +196,7 @@ async function extractFinancials(financialsText: string): Promise<{
   net_operating_income_usd: number | null;
   interior_renovation_budget_usd: number | null;
 }> {
+  const fallback = extractFinancialsWithRegex(financialsText);
   const prompt = `Extract Year 1 financial figures from this Offering Memorandum pro forma table text.
 
 Return JSON with exactly these keys (integer dollar amounts, renovation budgets are typically negative):
@@ -142,9 +210,9 @@ ${financialsText.slice(0, 4000)}`;
 
   const raw = await callGroq(prompt);
   try {
-    return JSON.parse(raw);
+    return { ...fallback, ...JSON.parse(raw) };
   } catch {
-    return { net_operating_income_usd: null, interior_renovation_budget_usd: null };
+    return fallback;
   }
 }
 
@@ -188,8 +256,13 @@ export const Route = createFileRoute("/api/upload-om")({
 
           // 2. Call Groq — two sequential requests to stay within token limits
           const [meta, fins] = await Promise.all([
-            extractMetadata(cover),
-            financials ? extractFinancials(financials) : Promise.resolve({ net_operating_income_usd: null, interior_renovation_budget_usd: null }),
+            extractMetadata(cover).catch(() => extractMetadataWithRegex(cover)),
+            financials
+              ? extractFinancials(financials).catch(() => extractFinancialsWithRegex(financials))
+              : Promise.resolve({
+                  net_operating_income_usd: null,
+                  interior_renovation_budget_usd: null,
+                }),
           ]);
 
           // 3. Derive metrics
@@ -199,8 +272,10 @@ export const Route = createFileRoute("/api/upload-om")({
 
           const derived: Record<string, number> = {};
           if (noi != null && reno != null) derived.net_cash_flow_after_capex_usd = noi + reno;
-          if (noi != null && units) derived.noi_per_unit_usd = Math.round((noi / units) * 100) / 100;
-          if (reno != null && units) derived.reno_cost_per_unit_usd = Math.round((Math.abs(reno) / units) * 100) / 100;
+          if (noi != null && units)
+            derived.noi_per_unit_usd = Math.round((noi / units) * 100) / 100;
+          if (reno != null && units)
+            derived.reno_cost_per_unit_usd = Math.round((Math.abs(reno) / units) * 100) / 100;
 
           // 4. Merge with stub market data
           const submarket = "DuPage County";
@@ -222,7 +297,7 @@ export const Route = createFileRoute("/api/upload-om")({
             derived_metrics: derived,
           };
 
-          return new Response(JSON.stringify(deal), {
+          return new Response(JSON.stringify(evaluateDeal(deal)), {
             headers: { "Content-Type": "application/json" },
           });
         } catch (err) {

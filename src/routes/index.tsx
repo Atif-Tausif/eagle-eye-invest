@@ -32,9 +32,17 @@ export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { title: "MultifamilyIQ — Deal Analysis Agent" },
-      { name: "description", content: "AI-powered multifamily CRE deal screening with risk scoring, flag detection, and instant deal memos." },
+      {
+        name: "description",
+        content:
+          "AI-powered multifamily CRE deal screening with risk scoring, flag detection, and instant deal memos.",
+      },
       { property: "og:title", content: "MultifamilyIQ — Deal Analysis Agent" },
-      { property: "og:description", content: "AI-powered multifamily CRE deal screening with risk scoring, flag detection, and instant deal memos." },
+      {
+        property: "og:description",
+        content:
+          "AI-powered multifamily CRE deal screening with risk scoring, flag detection, and instant deal memos.",
+      },
     ],
   }),
   component: Dashboard,
@@ -63,16 +71,31 @@ interface UiFlag {
 }
 
 const MEMO_SECTIONS: Array<{ key: string; label: string; body: string }> = [
-  { key: "demand", label: "Demand Analysis",
-    body: "Submarket demand fundamentals are mixed. Population growth of 1.4% CAGR and renter HH formation of 1.1% support absorption, but 1,840 competing Class A units in lease-up by 2027 will pressure rent growth and concessions for the next 24 months. Drive-time employment within 15 minutes shows healthy diversity (healthcare 22%, logistics 18%, education 12%), though wage growth is decelerating." },
-  { key: "financial", label: "Financial Strength",
-    body: "Underwriting fails covenant stress. Year-1 DSCR of 1.08x sits well below the agency 1.25x minimum and breaks to 0.94x under a +100bps rate shock. Yield-on-cost of 5.3% provides only 40bps of spread over the prevailing 4.9% market cap rate — below the 100bps threshold typical for value-add execution risk." },
-  { key: "risks", label: "Key Risks",
-    body: "(1) Refinance risk in Year 3 given covenant gap. (2) Rent growth assumption disconnected from submarket reality (5.8% UW vs 2.1% trend). (3) CapEx budget insufficient to deliver underwritten premiums. (4) Operational drag in payroll and R&M suggests management transition execution risk." },
-  { key: "sponsor", label: "Sponsor & Structure",
-    body: "Sponsor has executed 6 prior value-add deals in adjacent submarkets with a 1.9x equity multiple track record. However, two of the last three deals required capital calls. Proposed GP co-invest of 8% is below the 10% threshold typically required for this risk profile. Promote structure (8% pref, 70/30 above) is market." },
-  { key: "exit", label: "Exit Strategy",
-    body: "Year-5 exit underwritten at a 5.25% cap on stabilized NOI, representing 35bps of cap compression from entry. Given supply pipeline and interest rate forward curve, a flat-to-25bps decompression scenario is more defensible, which compresses the IRR from 16.4% UW to ~9.8% — below typical LP return thresholds for value-add multifamily." },
+  {
+    key: "demand",
+    label: "Demand Analysis",
+    body: "Submarket demand fundamentals are mixed. Population growth of 1.4% CAGR and renter HH formation of 1.1% support absorption, but 1,840 competing Class A units in lease-up by 2027 will pressure rent growth and concessions for the next 24 months. Drive-time employment within 15 minutes shows healthy diversity (healthcare 22%, logistics 18%, education 12%), though wage growth is decelerating.",
+  },
+  {
+    key: "financial",
+    label: "Financial Strength",
+    body: "Underwriting fails covenant stress. Year-1 DSCR of 1.08x sits well below the agency 1.25x minimum and breaks to 0.94x under a +100bps rate shock. Yield-on-cost of 5.3% provides only 40bps of spread over the prevailing 4.9% market cap rate — below the 100bps threshold typical for value-add execution risk.",
+  },
+  {
+    key: "risks",
+    label: "Key Risks",
+    body: "(1) Refinance risk in Year 3 given covenant gap. (2) Rent growth assumption disconnected from submarket reality (5.8% UW vs 2.1% trend). (3) CapEx budget insufficient to deliver underwritten premiums. (4) Operational drag in payroll and R&M suggests management transition execution risk.",
+  },
+  {
+    key: "sponsor",
+    label: "Sponsor & Structure",
+    body: "Sponsor has executed 6 prior value-add deals in adjacent submarkets with a 1.9x equity multiple track record. However, two of the last three deals required capital calls. Proposed GP co-invest of 8% is below the 10% threshold typically required for this risk profile. Promote structure (8% pref, 70/30 above) is market.",
+  },
+  {
+    key: "exit",
+    label: "Exit Strategy",
+    body: "Year-5 exit underwritten at a 5.25% cap on stabilized NOI, representing 35bps of cap compression from entry. Given supply pipeline and interest rate forward curve, a flat-to-25bps decompression scenario is more defensible, which compresses the IRR from 16.4% UW to ~9.8% — below typical LP return thresholds for value-add multifamily.",
+  },
 ];
 
 function flagSeverity(severity: RiskFlag["severity"]): FlagSeverity {
@@ -94,9 +117,10 @@ function buildMetrics(payload: EnginePayload): MetricCard[] {
   const rentFlag = payload.flags.find((f) => f.id.startsWith("rent"));
   const dscr = (dscrFlag?.metrics.dscr as number | undefined) ?? 0;
   const proForma = (rentFlag?.metrics.pro_forma_rent_growth_pct as number | undefined) ?? 5.8;
-  const submarketRent = (rentFlag?.metrics.submarket_rent_growth_avg_pct as number | undefined)
-    ?? deal.market_context?.rent_growth_trailing_3yr?.trailing_3yr_cagr_pct
-    ?? 0;
+  const submarketRent =
+    (rentFlag?.metrics.submarket_rent_growth_avg_pct as number | undefined) ??
+    deal.market_context?.rent_growth_trailing_3yr?.trailing_3yr_cagr_pct ??
+    0;
 
   const occupancy = deal.market_context?.submarket_occupancy?.average_occupancy_pct ?? 0;
   const occChangeBps = deal.market_context?.submarket_occupancy?.trailing_12mo_change_bps ?? 0;
@@ -107,11 +131,9 @@ function buildMetrics(payload: EnginePayload): MetricCard[] {
   const noiPerUnit = deal.derived_metrics?.noi_per_unit_usd ?? 0;
   const netCfAfterCapex = deal.derived_metrics?.net_cash_flow_after_capex_usd ?? 0;
 
-  const dscrStatus: MetricStatus =
-    dscr < 1.15 ? "bad" : dscr < 1.25 ? "warn" : "good";
+  const dscrStatus: MetricStatus = dscr < 1.15 ? "bad" : dscr < 1.25 ? "warn" : "good";
   const rentGap = proForma - submarketRent;
-  const rentStatus: MetricStatus =
-    rentGap > 4 ? "bad" : rentGap > 2 ? "warn" : "good";
+  const rentStatus: MetricStatus = rentGap > 4 ? "bad" : rentGap > 2 ? "warn" : "good";
   const occStatus: MetricStatus = occChangeBps < -50 ? "warn" : "good";
   const vacancyStatus: MetricStatus =
     occChangeBps <= -100 ? "bad" : occChangeBps < -50 ? "warn" : "good";
@@ -133,8 +155,9 @@ function buildMetrics(payload: EnginePayload): MetricCard[] {
       delta: dscr < 1.25 ? "Below 1.25x covenant" : "Above covenant",
       status: dscrStatus,
       icon: Activity,
-      detail: dscrFlag?.justification
-        ?? `Year-1 DSCR of ${dscr.toFixed(2)}x computed from parsed NOI of $${year1Noi(deal).toLocaleString()}.`,
+      detail:
+        dscrFlag?.justification ??
+        `Year-1 DSCR of ${dscr.toFixed(2)}x computed from parsed NOI of $${year1Noi(deal).toLocaleString()}.`,
     },
     {
       key: "expense",
@@ -154,14 +177,17 @@ function buildMetrics(payload: EnginePayload): MetricCard[] {
       delta: `Submarket avg: ${submarketRent.toFixed(1)}%`,
       status: rentStatus,
       icon: TrendingUp,
-      detail: rentFlag?.justification
-        ?? `Pro-forma rent growth of ${proForma.toFixed(1)}% vs ${submarketRent.toFixed(1)}% submarket 3-year average.`,
+      detail:
+        rentFlag?.justification ??
+        `Pro-forma rent growth of ${proForma.toFixed(1)}% vs ${submarketRent.toFixed(1)}% submarket 3-year average.`,
     },
     {
       key: "vacancy",
       label: "Economic Vacancy",
       value: `${economicVacancy.toFixed(1)}%`,
-      delta: pipelineUnits ? `${pipelineUnits.toLocaleString()} units by 2027` : "Pipeline pressure",
+      delta: pipelineUnits
+        ? `${pipelineUnits.toLocaleString()} units by 2027`
+        : "Pipeline pressure",
       status: vacancyStatus,
       icon: TrendingDown,
       detail: `Submarket economic vacancy is ${economicVacancy.toFixed(1)}%. ${pipelineUnits.toLocaleString()} competing units are in the construction pipeline through 2027, pressuring rent growth and concessions.`,
@@ -196,7 +222,10 @@ function year1Noi(deal: DealPayload): number {
   return deal.financial_projections?.year_1?.net_operating_income_usd ?? 0;
 }
 
-function verdictLabel(score: number): { label: string; tone: "destructive" | "warning" | "success" } {
+function verdictLabel(score: number): {
+  label: string;
+  tone: "destructive" | "warning" | "success";
+} {
   if (score < 35) return { label: "NO-GO", tone: "destructive" };
   if (score < 65) return { label: "CAUTION", tone: "warning" };
   return { label: "GO", tone: "success" };
@@ -266,14 +295,20 @@ function Dashboard() {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error ?? `Failed to analyze deal (${res.status})`);
       }
-      await loadDeal();
+      const data = (await res.json()) as EnginePayload;
+      setEngine(data);
+      if (data.flags.length) setSelectedFlag(data.flags[0].id);
+      const negotiation = evaluateNegotiationOpportunities(data.deal);
+      if (negotiation.opportunities.length) {
+        setSelectedNegotiation(negotiation.opportunities[0].id);
+      }
       setPendingFile(null);
     } catch (err) {
       setAnalyzeError(err instanceof Error ? err.message : "Failed to analyze deal");
     } finally {
       setAnalyzing(false);
     }
-  }, [pendingFile, loadDeal]);
+  }, [pendingFile]);
 
   const metrics = useMemo(() => (engine ? buildMetrics(engine) : []), [engine]);
   const uiFlags = useMemo(() => (engine ? buildUiFlags(engine.flags) : []), [engine]);
@@ -423,8 +458,13 @@ function Dashboard() {
               role="button"
               tabIndex={0}
               onClick={() => fileInputRef.current?.click()}
-              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click(); }}
-              onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click();
+              }}
+              onDragOver={(e) => {
+                e.preventDefault();
+                setDragOver(true);
+              }}
               onDragLeave={() => setDragOver(false)}
               onDrop={onDrop}
               className={`cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition ${dragOver ? "border-primary bg-primary/10" : "border-border bg-background/50"}`}
@@ -436,16 +476,17 @@ function Dashboard() {
 
             <ul className="mt-3 space-y-1.5">
               {files.map((f) => (
-                <li key={f} className="flex items-center gap-2 rounded-md bg-elevated px-2.5 py-1.5 text-xs">
+                <li
+                  key={f}
+                  className="flex items-center gap-2 rounded-md bg-elevated px-2.5 py-1.5 text-xs"
+                >
                   <FileText className="h-3.5 w-3.5 text-muted-foreground" />
                   <span className="truncate">{f}</span>
                 </li>
               ))}
             </ul>
 
-            {analyzeError && (
-              <p className="mt-2 text-[11px] text-destructive">{analyzeError}</p>
-            )}
+            {analyzeError && <p className="mt-2 text-[11px] text-destructive">{analyzeError}</p>}
 
             <button
               onClick={analyzeDeal}
@@ -456,9 +497,20 @@ function Dashboard() {
             </button>
 
             <div className="mt-4 space-y-2 border-t border-border pt-3 text-[11px] text-muted-foreground">
-              <div className="flex justify-between"><span>Flags triggered</span><span className="text-foreground">{uiFlags.length}</span></div>
-              <div className="flex justify-between"><span>Risk score</span><span className="text-foreground">{score}/100</span></div>
-              <div className="flex justify-between"><span>Data as of</span><span className="text-foreground">{engine.deal.merged_at?.slice(0, 10) ?? "—"}</span></div>
+              <div className="flex justify-between">
+                <span>Flags triggered</span>
+                <span className="text-foreground">{uiFlags.length}</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Risk score</span>
+                <span className="text-foreground">{score}/100</span>
+              </div>
+              <div className="flex justify-between">
+                <span>Data as of</span>
+                <span className="text-foreground">
+                  {engine.deal.merged_at?.slice(0, 10) ?? "—"}
+                </span>
+              </div>
             </div>
           </section>
         </aside>
@@ -471,7 +523,11 @@ function Dashboard() {
               const Icon = m.icon;
               const active = selectedMetric === m.key;
               const statusColor =
-                m.status === "good" ? "text-success" : m.status === "warn" ? "text-warning" : "text-destructive";
+                m.status === "good"
+                  ? "text-success"
+                  : m.status === "warn"
+                    ? "text-warning"
+                    : "text-destructive";
               return (
                 <button
                   key={m.key}
@@ -479,7 +535,9 @@ function Dashboard() {
                   className={`group rounded-xl border bg-panel p-3 text-left transition hover:bg-elevated ${active ? "border-primary ring-1 ring-primary/40" : "border-border"}`}
                 >
                   <div className="flex items-center justify-between">
-                    <span className="text-[11px] uppercase tracking-wide text-muted-foreground">{m.label}</span>
+                    <span className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      {m.label}
+                    </span>
                     <Icon className={`h-3.5 w-3.5 ${statusColor}`} />
                   </div>
                   <div className="mt-2 text-xl font-semibold">{m.value}</div>
@@ -518,9 +576,11 @@ function Dashboard() {
                 {uiFlags.map((f) => {
                   const active = selectedFlag === f.id;
                   const sev =
-                    f.severity === "high" ? { c: "text-destructive", bg: "bg-destructive/15", label: "HIGH" }
-                    : f.severity === "med" ? { c: "text-warning", bg: "bg-warning/15", label: "MED" }
-                    : { c: "text-info", bg: "bg-info/15", label: "LOW" };
+                    f.severity === "high"
+                      ? { c: "text-destructive", bg: "bg-destructive/15", label: "HIGH" }
+                      : f.severity === "med"
+                        ? { c: "text-warning", bg: "bg-warning/15", label: "MED" }
+                        : { c: "text-info", bg: "bg-info/15", label: "LOW" };
                   return (
                     <li key={f.id}>
                       <button
@@ -533,10 +593,18 @@ function Dashboard() {
                         <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${sev.c}`} />
                         <div className="flex-1 min-w-0">
                           <div className="flex items-center gap-2">
-                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${sev.bg} ${sev.c}`}>{sev.label}</span>
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${sev.bg} ${sev.c}`}
+                            >
+                              {sev.label}
+                            </span>
                             <span className="truncate text-sm font-medium">{f.title}</span>
                           </div>
-                          <p className={`mt-1 text-xs text-muted-foreground ${active ? "" : "line-clamp-1"}`}>{f.body}</p>
+                          <p
+                            className={`mt-1 text-xs text-muted-foreground ${active ? "" : "line-clamp-1"}`}
+                          >
+                            {f.body}
+                          </p>
                         </div>
                         {active ? (
                           <ChevronDown className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
@@ -560,9 +628,13 @@ function Dashboard() {
 
         {/* Right — Risk Score */}
         <aside className="col-span-12 lg:col-span-3">
-          <section className={`rounded-xl border bg-panel p-5 ${verdict.tone === "destructive" ? "border-destructive/40" : verdict.tone === "warning" ? "border-warning/40" : "border-success/40"}`}>
+          <section
+            className={`rounded-xl border bg-panel p-5 ${verdict.tone === "destructive" ? "border-destructive/40" : verdict.tone === "warning" ? "border-warning/40" : "border-success/40"}`}
+          >
             <div className="flex items-center gap-2">
-              <ShieldAlert className={`h-4 w-4 ${verdict.tone === "destructive" ? "text-destructive" : verdict.tone === "warning" ? "text-warning" : "text-success"}`} />
+              <ShieldAlert
+                className={`h-4 w-4 ${verdict.tone === "destructive" ? "text-destructive" : verdict.tone === "warning" ? "text-warning" : "text-success"}`}
+              />
               <h2 className="text-sm font-semibold">Risk Score</h2>
             </div>
 
@@ -570,26 +642,54 @@ function Dashboard() {
               <RiskDial score={score} />
             </div>
 
-            <div className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 ring-1 ${
-              verdict.tone === "destructive"
-                ? "bg-destructive/15 ring-destructive/40"
-                : verdict.tone === "warning"
-                  ? "bg-warning/15 ring-warning/40"
-                  : "bg-success/15 ring-success/40"
-            }`}>
-              <AlertOctagon className={`h-5 w-5 ${
-                verdict.tone === "destructive" ? "text-destructive" : verdict.tone === "warning" ? "text-warning" : "text-success"
-              }`} />
-              <span className={`text-base font-bold tracking-wider ${
-                verdict.tone === "destructive" ? "text-destructive" : verdict.tone === "warning" ? "text-warning" : "text-success"
-              }`}>{verdict.label}</span>
+            <div
+              className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 ring-1 ${
+                verdict.tone === "destructive"
+                  ? "bg-destructive/15 ring-destructive/40"
+                  : verdict.tone === "warning"
+                    ? "bg-warning/15 ring-warning/40"
+                    : "bg-success/15 ring-success/40"
+              }`}
+            >
+              <AlertOctagon
+                className={`h-5 w-5 ${
+                  verdict.tone === "destructive"
+                    ? "text-destructive"
+                    : verdict.tone === "warning"
+                      ? "text-warning"
+                      : "text-success"
+                }`}
+              />
+              <span
+                className={`text-base font-bold tracking-wider ${
+                  verdict.tone === "destructive"
+                    ? "text-destructive"
+                    : verdict.tone === "warning"
+                      ? "text-warning"
+                      : "text-success"
+                }`}
+              >
+                {verdict.label}
+              </span>
             </div>
 
             <ul className="mt-4 space-y-1.5 text-[11px]">
-              <li className="flex justify-between"><span className="text-muted-foreground">Flags</span><span className="text-foreground">{uiFlags.length}</span></li>
-              <li className="flex justify-between"><span className="text-muted-foreground">Critical</span><span className="text-destructive">{countFlags(uiFlags, "high")}</span></li>
-              <li className="flex justify-between"><span className="text-muted-foreground">Medium</span><span className="text-warning">{countFlags(uiFlags, "med")}</span></li>
-              <li className="flex justify-between"><span className="text-muted-foreground">Year-1 NOI</span><span className="text-foreground">${year1Noi(engine.deal).toLocaleString()}</span></li>
+              <li className="flex justify-between">
+                <span className="text-muted-foreground">Flags</span>
+                <span className="text-foreground">{uiFlags.length}</span>
+              </li>
+              <li className="flex justify-between">
+                <span className="text-muted-foreground">Critical</span>
+                <span className="text-destructive">{countFlags(uiFlags, "high")}</span>
+              </li>
+              <li className="flex justify-between">
+                <span className="text-muted-foreground">Medium</span>
+                <span className="text-warning">{countFlags(uiFlags, "med")}</span>
+              </li>
+              <li className="flex justify-between">
+                <span className="text-muted-foreground">Year-1 NOI</span>
+                <span className="text-foreground">${year1Noi(engine.deal).toLocaleString()}</span>
+              </li>
             </ul>
           </section>
         </aside>
@@ -611,13 +711,20 @@ function Dashboard() {
                   </span>
                 )}
               </div>
-              {whyNotOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
+              {whyNotOpen ? (
+                <ChevronDown className="h-4 w-4 text-muted-foreground" />
+              ) : (
+                <ChevronRight className="h-4 w-4 text-muted-foreground" />
+              )}
             </button>
             {whyNotOpen && (
               <div className="space-y-3 p-4">
                 <ul className="space-y-2">
                   {ruleJustifications.map((text, idx) => (
-                    <li key={idx} className="flex gap-2 rounded-lg bg-elevated p-3 text-xs leading-relaxed text-muted-foreground">
+                    <li
+                      key={idx}
+                      className="flex gap-2 rounded-lg bg-elevated p-3 text-xs leading-relaxed text-muted-foreground"
+                    >
                       <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-warning/15 text-[10px] font-semibold text-warning">
                         {idx + 1}
                       </span>
@@ -627,11 +734,15 @@ function Dashboard() {
                 </ul>
                 {activeFlag && activeMetric && (
                   <div className="rounded-lg bg-elevated p-3">
-                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Selected flag · {activeMetric.label}</div>
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
+                      Selected flag · {activeMetric.label}
+                    </div>
                     <div className="mt-1 text-sm font-semibold">{activeFlag.title}</div>
                     <div className="mt-1 flex items-baseline gap-2">
                       <span className="text-lg font-semibold">{activeMetric.value}</span>
-                      <span className="text-[11px] text-muted-foreground">{activeMetric.delta}</span>
+                      <span className="text-[11px] text-muted-foreground">
+                        {activeMetric.delta}
+                      </span>
                     </div>
                   </div>
                 )}
@@ -662,7 +773,9 @@ function Dashboard() {
             </div>
             <div className="p-4">
               <h3 className="text-sm font-semibold">{activeMemoSection.label}</h3>
-              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{activeMemoSection.body}</p>
+              <p className="mt-2 text-xs leading-relaxed text-muted-foreground">
+                {activeMemoSection.body}
+              </p>
             </div>
           </div>
 
@@ -671,7 +784,9 @@ function Dashboard() {
             <h2 className="mb-3 text-sm font-semibold">Actions</h2>
             <div className="flex flex-col gap-2.5">
               <div className="flex flex-col gap-1">
-                <label className="text-[11px] text-muted-foreground">Analyst notes (appended to memo)</label>
+                <label className="text-[11px] text-muted-foreground">
+                  Analyst notes (appended to memo)
+                </label>
                 <textarea
                   value={analystNotes}
                   onChange={(e) => setAnalystNotes(e.target.value)}
@@ -688,9 +803,7 @@ function Dashboard() {
                 <FileText className="h-4 w-4" />
                 {exporting ? "Generating…" : "Export PDF Deal Memo"}
               </button>
-              {exportError && (
-                <p className="text-[11px] text-destructive">{exportError}</p>
-              )}
+              {exportError && <p className="text-[11px] text-destructive">{exportError}</p>}
               <button className="inline-flex items-center justify-center gap-2 rounded-md bg-purple px-4 py-2.5 text-sm font-medium text-purple-foreground transition hover:opacity-90">
                 <Bookmark className="h-4 w-4" /> Save to Portfolio
               </button>
@@ -704,9 +817,28 @@ function Dashboard() {
                 <DollarSign className="h-3.5 w-3.5" /> Deal economics
               </div>
               <ul className="mt-2 space-y-1 text-[11px]">
-                <li className="flex justify-between"><span className="text-muted-foreground">NOI / unit</span><span>${Math.round(engine.deal.derived_metrics?.noi_per_unit_usd ?? 0).toLocaleString()}</span></li>
-                <li className="flex justify-between"><span className="text-muted-foreground">Reno / unit</span><span>${Math.round(engine.deal.derived_metrics?.reno_cost_per_unit_usd ?? 0).toLocaleString()}</span></li>
-                <li className="flex justify-between"><span className="text-muted-foreground">Year-1 NOI</span><span>${year1Noi(engine.deal).toLocaleString()}</span></li>
+                <li className="flex justify-between">
+                  <span className="text-muted-foreground">NOI / unit</span>
+                  <span>
+                    $
+                    {Math.round(
+                      engine.deal.derived_metrics?.noi_per_unit_usd ?? 0,
+                    ).toLocaleString()}
+                  </span>
+                </li>
+                <li className="flex justify-between">
+                  <span className="text-muted-foreground">Reno / unit</span>
+                  <span>
+                    $
+                    {Math.round(
+                      engine.deal.derived_metrics?.reno_cost_per_unit_usd ?? 0,
+                    ).toLocaleString()}
+                  </span>
+                </li>
+                <li className="flex justify-between">
+                  <span className="text-muted-foreground">Year-1 NOI</span>
+                  <span>${year1Noi(engine.deal).toLocaleString()}</span>
+                </li>
               </ul>
             </div>
           </div>
@@ -725,11 +857,19 @@ function RiskDial({ score }: { score: number }) {
   const c = 2 * Math.PI * r;
   const pct = Math.max(0, Math.min(100, score)) / 100;
   const dash = c * pct;
-  const color = score < 35 ? "var(--destructive)" : score < 65 ? "var(--warning)" : "var(--success)";
+  const color =
+    score < 35 ? "var(--destructive)" : score < 65 ? "var(--warning)" : "var(--success)";
   return (
     <div className="relative" style={{ width: size, height: size }}>
       <svg width={size} height={size} className="-rotate-90">
-        <circle cx={size / 2} cy={size / 2} r={r} stroke="var(--border)" strokeWidth={stroke} fill="none" />
+        <circle
+          cx={size / 2}
+          cy={size / 2}
+          r={r}
+          stroke="var(--border)"
+          strokeWidth={stroke}
+          fill="none"
+        />
         <circle
           cx={size / 2}
           cy={size / 2}
@@ -742,8 +882,13 @@ function RiskDial({ score }: { score: number }) {
         />
       </svg>
       <div className="absolute inset-0 flex flex-col items-center justify-center">
-        <span className="text-3xl font-bold leading-none">{score}<span className="text-base font-medium text-muted-foreground">/100</span></span>
-        <span className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">Composite Risk</span>
+        <span className="text-3xl font-bold leading-none">
+          {score}
+          <span className="text-base font-medium text-muted-foreground">/100</span>
+        </span>
+        <span className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
+          Composite Risk
+        </span>
       </div>
     </div>
   );
