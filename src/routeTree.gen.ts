@@ -10,12 +10,25 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiUploadOmRouteImport } from './routes/api/upload-om'
+import { Route as ApiNegotiationRouteImport } from './routes/api/negotiation'
 import { Route as ApiExportMemoRouteImport } from './routes/api/export-memo'
 import { Route as ApiDealRouteImport } from './routes/api/deal'
+import { Route as ApiChatRouteImport } from './routes/api/chat'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUploadOmRoute = ApiUploadOmRouteImport.update({
+  id: '/api/upload-om',
+  path: '/api/upload-om',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiNegotiationRoute = ApiNegotiationRouteImport.update({
+  id: '/api/negotiation',
+  path: '/api/negotiation',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiExportMemoRoute = ApiExportMemoRouteImport.update({
@@ -28,35 +41,71 @@ const ApiDealRoute = ApiDealRouteImport.update({
   path: '/api/deal',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiChatRoute = ApiChatRouteImport.update({
+  id: '/api/chat',
+  path: '/api/chat',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/api/chat': typeof ApiChatRoute
   '/api/deal': typeof ApiDealRoute
   '/api/export-memo': typeof ApiExportMemoRoute
+  '/api/negotiation': typeof ApiNegotiationRoute
+  '/api/upload-om': typeof ApiUploadOmRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/api/chat': typeof ApiChatRoute
   '/api/deal': typeof ApiDealRoute
   '/api/export-memo': typeof ApiExportMemoRoute
+  '/api/negotiation': typeof ApiNegotiationRoute
+  '/api/upload-om': typeof ApiUploadOmRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/api/chat': typeof ApiChatRoute
   '/api/deal': typeof ApiDealRoute
   '/api/export-memo': typeof ApiExportMemoRoute
+  '/api/negotiation': typeof ApiNegotiationRoute
+  '/api/upload-om': typeof ApiUploadOmRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/deal' | '/api/export-memo'
+  fullPaths:
+    | '/'
+    | '/api/chat'
+    | '/api/deal'
+    | '/api/export-memo'
+    | '/api/negotiation'
+    | '/api/upload-om'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/deal' | '/api/export-memo'
-  id: '__root__' | '/' | '/api/deal' | '/api/export-memo'
+  to:
+    | '/'
+    | '/api/chat'
+    | '/api/deal'
+    | '/api/export-memo'
+    | '/api/negotiation'
+    | '/api/upload-om'
+  id:
+    | '__root__'
+    | '/'
+    | '/api/chat'
+    | '/api/deal'
+    | '/api/export-memo'
+    | '/api/negotiation'
+    | '/api/upload-om'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  ApiChatRoute: typeof ApiChatRoute
   ApiDealRoute: typeof ApiDealRoute
   ApiExportMemoRoute: typeof ApiExportMemoRoute
+  ApiNegotiationRoute: typeof ApiNegotiationRoute
+  ApiUploadOmRoute: typeof ApiUploadOmRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -66,6 +115,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/upload-om': {
+      id: '/api/upload-om'
+      path: '/api/upload-om'
+      fullPath: '/api/upload-om'
+      preLoaderRoute: typeof ApiUploadOmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/negotiation': {
+      id: '/api/negotiation'
+      path: '/api/negotiation'
+      fullPath: '/api/negotiation'
+      preLoaderRoute: typeof ApiNegotiationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/export-memo': {
@@ -82,24 +145,24 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiDealRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/chat': {
+      id: '/api/chat'
+      path: '/api/chat'
+      fullPath: '/api/chat'
+      preLoaderRoute: typeof ApiChatRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  ApiChatRoute: ApiChatRoute,
   ApiDealRoute: ApiDealRoute,
   ApiExportMemoRoute: ApiExportMemoRoute,
+  ApiNegotiationRoute: ApiNegotiationRoute,
+  ApiUploadOmRoute: ApiUploadOmRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { startInstance } from './start.ts'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-    config: Awaited<ReturnType<typeof startInstance.getOptions>>
-  }
-}

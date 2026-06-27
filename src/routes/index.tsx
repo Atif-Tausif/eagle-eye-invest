@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Upload,
   ArrowRight,
@@ -20,7 +20,13 @@ import {
   Flag,
   Activity,
 } from "lucide-react";
+import { DealAiChat } from "@/components/deal-ai-chat";
+import { NegotiationOpportunities } from "@/components/negotiation-opportunities";
 import type { DealPayload, EnginePayload, RiskFlag } from "@/lib/risk-engine";
+import {
+  evaluateNegotiationOpportunities,
+  type NegotiationOpportunity,
+} from "@/lib/negotiation-engine";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -205,50 +211,76 @@ function Dashboard() {
   const [selectedFlag, setSelectedFlag] = useState<string>("");
   const [whyNotOpen, setWhyNotOpen] = useState(true);
   const [activeMemo, setActiveMemo] = useState<string>("financial");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [files, setFiles] = useState<string[]>([]);
+  const [pendingFile, setPendingFile] = useState<File | null>(null);
   const [engine, setEngine] = useState<EnginePayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [analystNotes, setAnalystNotes] = useState("");
   const [exporting, setExporting] = useState(false);
   const [exportError, setExportError] = useState<string | null>(null);
+  const [selectedNegotiation, setSelectedNegotiation] = useState<string>("");
+
+  const loadDeal = useCallback(async () => {
+    setLoading(true);
+    setFetchError(null);
+    try {
+      const res = await fetch("/api/deal");
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `Failed to load deal (${res.status})`);
+      }
+      const data = (await res.json()) as EnginePayload;
+      setEngine(data);
+      if (data.flags.length) setSelectedFlag(data.flags[0].id);
+      const negotiation = evaluateNegotiationOpportunities(data.deal);
+      if (negotiation.opportunities.length) {
+        setSelectedNegotiation(negotiation.opportunities[0].id);
+      }
+      const pdfName = data.deal.source_pdf?.split(/[/\\]/).pop();
+      if (pdfName) setFiles([pdfName]);
+    } catch (err) {
+      setFetchError(err instanceof Error ? err.message : "Failed to load deal payload");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
 
   useEffect(() => {
-    let cancelled = false;
-
-    async function loadDeal() {
-      setLoading(true);
-      setFetchError(null);
-      try {
-        const res = await fetch("/api/deal");
-        if (!res.ok) {
-          const err = await res.json().catch(() => ({}));
-          throw new Error(err.error ?? `Failed to load deal (${res.status})`);
-        }
-        const data = (await res.json()) as EnginePayload;
-        if (cancelled) return;
-        setEngine(data);
-        if (data.flags.length) setSelectedFlag(data.flags[0].id);
-        const pdfName = data.deal.source_pdf?.split(/[/\\]/).pop();
-        if (pdfName) setFiles([pdfName]);
-      } catch (err) {
-        if (!cancelled) {
-          setFetchError(err instanceof Error ? err.message : "Failed to load deal payload");
-        }
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    }
-
     loadDeal();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  }, [loadDeal]);
+
+  const analyzeDeal = useCallback(async () => {
+    if (!pendingFile) return;
+    setAnalyzing(true);
+    setAnalyzeError(null);
+    try {
+      const formData = new FormData();
+      formData.append("file", pendingFile);
+      const res = await fetch("/api/upload-om", { method: "POST", body: formData });
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error(err.error ?? `Failed to analyze deal (${res.status})`);
+      }
+      await loadDeal();
+      setPendingFile(null);
+    } catch (err) {
+      setAnalyzeError(err instanceof Error ? err.message : "Failed to analyze deal");
+    } finally {
+      setAnalyzing(false);
+    }
+  }, [pendingFile, loadDeal]);
 
   const metrics = useMemo(() => (engine ? buildMetrics(engine) : []), [engine]);
   const uiFlags = useMemo(() => (engine ? buildUiFlags(engine.flags) : []), [engine]);
+  const negotiationOpportunities = useMemo<NegotiationOpportunity[]>(
+    () => (engine ? evaluateNegotiationOpportunities(engine.deal).opportunities : []),
+    [engine],
+  );
   const ruleJustifications = useMemo(
     () => engine?.flags.map((f) => f.justification) ?? [],
     [engine],
@@ -265,12 +297,33 @@ function Dashboard() {
   const location = engine?.deal.property_metadata?.location ?? "";
   const submarket = engine?.deal.market_context?.submarket ?? "";
 
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const dropped = Array.from(e.dataTransfer.files).map((f) => f.name);
-    if (dropped.length) setFiles((prev) => [...prev, ...dropped]);
+  const acceptFiles = useCallback((incoming: File[]) => {
+    const pdf = incoming.find((f) => f.name.toLowerCase().endsWith(".pdf"));
+    setAnalyzeError(null);
+    if (pdf) {
+      setPendingFile(pdf);
+      setFiles((prev) => [...prev, pdf.name]);
+    } else if (incoming.length) {
+      setAnalyzeError("Only PDF Offering Memoranda are supported right now");
+    }
   }, []);
+
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      acceptFiles(Array.from(e.dataTransfer.files));
+    },
+    [acceptFiles],
+  );
+
+  const onFileInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      acceptFiles(Array.from(e.target.files ?? []));
+      e.target.value = "";
+    },
+    [acceptFiles],
+  );
 
   const exportMemo = useCallback(async () => {
     setExporting(true);
@@ -359,15 +412,26 @@ function Dashboard() {
               <Upload className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold">Deal Ingestion Hub</h2>
             </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,application/pdf"
+              onChange={onFileInputChange}
+              className="hidden"
+            />
             <div
+              role="button"
+              tabIndex={0}
+              onClick={() => fileInputRef.current?.click()}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click(); }}
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
               onDrop={onDrop}
-              className={`rounded-lg border-2 border-dashed p-6 text-center transition ${dragOver ? "border-primary bg-primary/10" : "border-border bg-background/50"}`}
+              className={`cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition ${dragOver ? "border-primary bg-primary/10" : "border-border bg-background/50"}`}
             >
               <Upload className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
-              <p className="text-xs font-medium">Drop OM, T-12, Rent Roll</p>
-              <p className="mt-1 text-[11px] text-muted-foreground">PDF, XLSX, CSV up to 50 MB</p>
+              <p className="text-xs font-medium">Drop or click to select an Offering Memorandum</p>
+              <p className="mt-1 text-[11px] text-muted-foreground">PDF only, up to 50 MB</p>
             </div>
 
             <ul className="mt-3 space-y-1.5">
@@ -379,8 +443,16 @@ function Dashboard() {
               ))}
             </ul>
 
-            <button className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/20 transition hover:bg-primary/90">
-              Analyze Deal <ArrowRight className="h-4 w-4" />
+            {analyzeError && (
+              <p className="mt-2 text-[11px] text-destructive">{analyzeError}</p>
+            )}
+
+            <button
+              onClick={analyzeDeal}
+              disabled={!pendingFile || analyzing}
+              className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/20 transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-50"
+            >
+              {analyzing ? "Analyzing…" : "Analyze Deal"} <ArrowRight className="h-4 w-4" />
             </button>
 
             <div className="mt-4 space-y-2 border-t border-border pt-3 text-[11px] text-muted-foreground">
@@ -417,57 +489,72 @@ function Dashboard() {
             })}
           </div>
 
-          {/* Flag Feed */}
-          <div className="rounded-xl border border-border bg-panel">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <div className="flex items-center gap-2">
-                <Flag className="h-4 w-4 text-warning" />
-                <h2 className="text-sm font-semibold">Flag Feed</h2>
-                {countFlags(uiFlags, "high") > 0 && (
-                  <span className="ml-2 rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-medium text-destructive">
-                    {countFlags(uiFlags, "high")} High
-                  </span>
-                )}
-                {countFlags(uiFlags, "med") > 0 && (
-                  <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium text-warning">
-                    {countFlags(uiFlags, "med")} Med
-                  </span>
-                )}
-                {countFlags(uiFlags, "low") > 0 && (
-                  <span className="rounded-full bg-info/15 px-2 py-0.5 text-[10px] font-medium text-info">
-                    {countFlags(uiFlags, "low")} Low
-                  </span>
-                )}
+          {/* Flag Feed + Negotiation Opportunities */}
+          <div className="grid gap-4 lg:grid-cols-2">
+            <div className="rounded-xl border border-border bg-panel">
+              <div className="flex items-center justify-between border-b border-border px-4 py-3">
+                <div className="flex items-center gap-2">
+                  <Flag className="h-4 w-4 text-warning" />
+                  <h2 className="text-sm font-semibold">Flag Feed</h2>
+                  {countFlags(uiFlags, "high") > 0 && (
+                    <span className="ml-2 rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-medium text-destructive">
+                      {countFlags(uiFlags, "high")} High
+                    </span>
+                  )}
+                  {countFlags(uiFlags, "med") > 0 && (
+                    <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium text-warning">
+                      {countFlags(uiFlags, "med")} Med
+                    </span>
+                  )}
+                  {countFlags(uiFlags, "low") > 0 && (
+                    <span className="rounded-full bg-info/15 px-2 py-0.5 text-[10px] font-medium text-info">
+                      {countFlags(uiFlags, "low")} Low
+                    </span>
+                  )}
+                </div>
+                <span className="text-[11px] text-muted-foreground">Live</span>
               </div>
-              <span className="text-[11px] text-muted-foreground">Live</span>
-            </div>
-            <ul className="divide-y divide-border">
-              {uiFlags.map((f) => {
-                const active = selectedFlag === f.id;
-                const sev =
-                  f.severity === "high" ? { c: "text-destructive", bg: "bg-destructive/15", label: "HIGH" }
-                  : f.severity === "med" ? { c: "text-warning", bg: "bg-warning/15", label: "MED" }
-                  : { c: "text-info", bg: "bg-info/15", label: "LOW" };
-                return (
-                  <li key={f.id}>
-                    <button
-                      onClick={() => { setSelectedFlag(f.id); setSelectedMetric(f.linkedMetric); }}
-                      className={`flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-elevated ${active ? "bg-elevated" : ""}`}
-                    >
-                      <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${sev.c}`} />
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-2">
-                          <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${sev.bg} ${sev.c}`}>{sev.label}</span>
-                          <span className="truncate text-sm font-medium">{f.title}</span>
+              <ul className="divide-y divide-border">
+                {uiFlags.map((f) => {
+                  const active = selectedFlag === f.id;
+                  const sev =
+                    f.severity === "high" ? { c: "text-destructive", bg: "bg-destructive/15", label: "HIGH" }
+                    : f.severity === "med" ? { c: "text-warning", bg: "bg-warning/15", label: "MED" }
+                    : { c: "text-info", bg: "bg-info/15", label: "LOW" };
+                  return (
+                    <li key={f.id}>
+                      <button
+                        onClick={() => {
+                          setSelectedFlag(active ? "" : f.id);
+                          setSelectedMetric(f.linkedMetric);
+                        }}
+                        className={`flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-elevated ${active ? "bg-elevated" : ""}`}
+                      >
+                        <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${sev.c}`} />
+                        <div className="flex-1 min-w-0">
+                          <div className="flex items-center gap-2">
+                            <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${sev.bg} ${sev.c}`}>{sev.label}</span>
+                            <span className="truncate text-sm font-medium">{f.title}</span>
+                          </div>
+                          <p className={`mt-1 text-xs text-muted-foreground ${active ? "" : "line-clamp-1"}`}>{f.body}</p>
                         </div>
-                        <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{f.body}</p>
-                      </div>
-                      <ChevronRight className="mt-1 h-4 w-4 text-muted-foreground" />
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
+                        {active ? (
+                          <ChevronDown className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                        )}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+
+            <NegotiationOpportunities
+              opportunities={negotiationOpportunities}
+              selectedId={selectedNegotiation}
+              onSelect={setSelectedNegotiation}
+            />
           </div>
         </section>
 
@@ -625,6 +712,8 @@ function Dashboard() {
           </div>
         </section>
       </main>
+
+      <DealAiChat />
     </div>
   );
 }

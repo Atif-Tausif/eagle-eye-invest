@@ -40,7 +40,18 @@ export interface DealPayload {
       trailing_12mo_change_bps?: number;
     };
     construction_pipeline?: {
-      summary?: { delivering_through_2027_units?: number; total_pipeline_units?: number };
+      submarket?: string;
+      summary?: {
+        delivering_through_2027_units?: number;
+        total_pipeline_units?: number;
+        project_count?: number;
+      };
+      projects?: Array<{
+        project_name: string;
+        units: number;
+        status: string;
+        expected_delivery: string;
+      }>;
     };
   };
   derived_metrics?: {
@@ -65,14 +76,14 @@ export interface EnginePayload {
 
 const RENT_GAP_MEDIUM_PCT = 2.0;
 const RENT_GAP_CRITICAL_PCT = 4.0;
-const DSCR_MEDIUM_THRESHOLD = 1.25;
+export const DSCR_MEDIUM_THRESHOLD = 1.25;
 const DSCR_CRITICAL_THRESHOLD = 1.15;
 // Submarket occupancy deterioration thresholds (trailing 12-month bps change)
 const VACANCY_DELTA_MEDIUM_BPS = -50;
 const VACANCY_DELTA_CRITICAL_BPS = -100;
 const DEFAULT_PRO_FORMA_RENT_GROWTH_PCT = 5.8;
 const DEFAULT_LOAN_AMOUNT_USD = 60_000_000;
-const DEFAULT_DEBT_RATE = 0.096;
+export const DEFAULT_DEBT_RATE = 0.096;
 
 const SEVERITY_DEDUCTIONS: Record<RiskSeverity, number> = {
   "Critical Risk": 35,
@@ -103,21 +114,21 @@ function submarketRentGrowthAvg(deal: DealPayload): number {
   return 0;
 }
 
-function year1Noi(deal: DealPayload): number {
+export function year1Noi(deal: DealPayload): number {
   return deal.financial_projections?.year_1?.net_operating_income_usd ?? 0;
 }
 
-function loanAmount(deal: DealPayload): number {
+export function loanAmount(deal: DealPayload): number {
   return underwriting(deal).loan_amount_usd ?? DEFAULT_LOAN_AMOUNT_USD;
 }
 
-function hasCapexBudget(deal: DealPayload): boolean {
+export function hasCapexBudget(deal: DealPayload): boolean {
   const capex =
     deal.financial_projections?.capital_expenditures?.interior_renovation_budget_usd;
   return capex != null && Math.abs(capex) > 0;
 }
 
-function annualDebtService(
+export function annualDebtService(
   loan: number,
   rate: number,
   interestOnly = true,
