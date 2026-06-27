@@ -571,7 +571,14 @@ function Dashboard() {
         </div>
       </header>
 
+      {analyzing && <AnalyzeOverlay step={analyzeStep} />}
+
       <main className="grid grid-cols-12 gap-4 p-4">
+        {/* Executive Summary */}
+        <section className="col-span-12">
+          <ExecutiveSummaryCard data={execSummary} />
+        </section>
+
         {/* Sidebar — Deal Ingestion Hub */}
         <aside className="col-span-12 lg:col-span-3">
           <section className="rounded-xl border border-border bg-panel p-4">
