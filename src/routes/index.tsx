@@ -241,6 +241,113 @@ function countFlags(flags: UiFlag[], severity: FlagSeverity): number {
   return flags.filter((f) => f.severity === severity).length;
 }
 
+const ANALYZE_STEPS = [
+  "Uploading Offering Memorandum...",
+  "Reading PDF...",
+  "Extracting Property Data...",
+  "Analyzing Financials...",
+  "Checking Market Data...",
+  "Running Risk Engine...",
+  "Generating Investment Memo...",
+  "Complete.",
+];
+
+function riskScoreExplanation(
+  score: number,
+  flags: UiFlag[],
+  verdictLabelText: string,
+): string {
+  const high = countFlags(flags, "high");
+  const med = countFlags(flags, "med");
+  const low = countFlags(flags, "low");
+  const driver =
+    flags.find((f) => f.severity === "high") ??
+    flags.find((f) => f.severity === "med") ??
+    flags[0];
+  const driverText = driver ? ` Primary driver: ${driver.title.toLowerCase()}.` : "";
+  if (score < 35) {
+    return `Composite score of ${score}/100 reflects ${high} critical and ${med} medium risk flags that materially undermine underwriting. The deal screens as ${verdictLabelText}.${driverText}`;
+  }
+  if (score < 65) {
+    return `Composite score of ${score}/100 indicates a borderline profile — ${high} critical, ${med} medium, ${low} low flags. Proceed with structural protection.${driverText}`;
+  }
+  return `Composite score of ${score}/100 reflects clean fundamentals with only ${med + low} minor flags and no critical risks.${driverText}`;
+}
+
+function businessImpactForFlag(flag: UiFlag): string {
+  if (flag.linkedMetric === "dscr")
+    return "Lender covenant break risk; refinance pressure and potential equity recapitalization in years 2-3.";
+  if (flag.linkedMetric === "rent")
+    return "Pro-forma revenue may overshoot achievable rents, eroding NOI and exit value at sale.";
+  if (flag.linkedMetric === "vacancy")
+    return "New supply absorbs incremental demand, extending lease-up and pressuring concessions.";
+  if (flag.linkedMetric === "capex")
+    return "Budget gap forces incremental owner capital or unfinished unit upgrades that miss premium pricing.";
+  return "Underwriting downside not absorbed by current deal structure; reduces probability of base-case returns.";
+}
+
+function recommendationForFlag(flag: UiFlag): string {
+  if (flag.linkedMetric === "dscr")
+    return "Negotiate a purchase price reduction to right-size the loan or secure an interest-rate buy-down at closing.";
+  if (flag.linkedMetric === "rent")
+    return "Re-underwrite to submarket trend (≈ 2-3% growth) and stress-test IRR before submitting LOI.";
+  if (flag.linkedMetric === "vacancy")
+    return "Extend lease-up assumptions by 6-9 months and add a concession reserve to the operating budget.";
+  if (flag.linkedMetric === "capex")
+    return "Request seller credit for the renovation gap or descope premium-unit count to match available budget.";
+  return "Add structural protection in the LOI: contingency reserves, earn-outs, or staged closing.";
+}
+
+interface ExecutiveSummary {
+  recommendation: string;
+  tone: "destructive" | "warning" | "success";
+  confidence: number;
+  reasons: string[];
+  adjustmentLow: number;
+  adjustmentHigh: number;
+  summary: string;
+}
+
+function buildExecutiveSummary(
+  score: number,
+  flags: UiFlag[],
+  opps: NegotiationOpportunity[],
+  dealTitle: string,
+): ExecutiveSummary {
+  const v = verdictLabel(score);
+  const confidence = Math.min(98, Math.max(55, Math.round(55 + Math.abs(score - 50) * 0.9)));
+  const sorted = [...flags].sort((a, b) => {
+    const rank = { high: 0, med: 1, low: 2 } as const;
+    return rank[a.severity] - rank[b.severity];
+  });
+  const reasons = sorted.slice(0, 3).map((f) => f.title);
+  while (reasons.length < 3) {
+    reasons.push(
+      score >= 65
+        ? "No critical underwriting breaks detected"
+        : "Supporting risk factors within tolerance",
+    );
+  }
+  const adjustmentLow = opps.reduce((s, o) => s + o.suggested_price_reduction_low_usd, 0);
+  const adjustmentHigh = opps.reduce((s, o) => s + o.suggested_price_reduction_high_usd, 0);
+  const verdictPhrase =
+    v.tone === "destructive"
+      ? "fails core underwriting tests and is not recommended at current pricing"
+      : v.tone === "warning"
+        ? "is investable only with price concessions and structural protection"
+        : "screens as a strong base-case investment with limited downside";
+  const summary = `${dealTitle} ${verdictPhrase}. Composite risk score is ${score}/100 with ${countFlags(flags, "high")} critical and ${countFlags(flags, "med")} medium flags identified by the rule engine.`;
+  return {
+    recommendation: v.label,
+    tone: v.tone,
+    confidence,
+    reasons,
+    adjustmentLow,
+    adjustmentHigh,
+    summary,
+  };
+}
+
 function Dashboard() {
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>("dscr");
   const [selectedFlag, setSelectedFlag] = useState<string>("");
