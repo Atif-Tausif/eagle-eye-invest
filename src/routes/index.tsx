@@ -455,6 +455,15 @@ function Dashboard() {
   const location = engine?.deal.property_metadata?.location ?? "";
   const submarket = engine?.deal.market_context?.submarket ?? "";
 
+  const execSummary = useMemo(
+    () => buildExecutiveSummary(score, uiFlags, negotiationOpportunities, dealTitle),
+    [score, uiFlags, negotiationOpportunities, dealTitle],
+  );
+  const riskExplanation = useMemo(
+    () => riskScoreExplanation(score, uiFlags, verdict.label),
+    [score, uiFlags, verdict.label],
+  );
+
   const acceptFiles = useCallback((incoming: File[]) => {
     const pdf = incoming.find((f) => f.name.toLowerCase().endsWith(".pdf"));
     setAnalyzeError(null);
