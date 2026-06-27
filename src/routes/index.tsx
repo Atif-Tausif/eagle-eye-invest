@@ -19,6 +19,12 @@ import {
   ShieldAlert,
   Flag,
   Activity,
+  Loader2,
+  CheckCircle2,
+  Sparkles,
+  Target,
+  Lightbulb,
+  Gauge,
 } from "lucide-react";
 import { DealAiChat } from "@/components/deal-ai-chat";
 import { NegotiationOpportunities } from "@/components/negotiation-opportunities";
@@ -235,6 +241,113 @@ function countFlags(flags: UiFlag[], severity: FlagSeverity): number {
   return flags.filter((f) => f.severity === severity).length;
 }
 
+const ANALYZE_STEPS = [
+  "Uploading Offering Memorandum...",
+  "Reading PDF...",
+  "Extracting Property Data...",
+  "Analyzing Financials...",
+  "Checking Market Data...",
+  "Running Risk Engine...",
+  "Generating Investment Memo...",
+  "Complete.",
+];
+
+function riskScoreExplanation(
+  score: number,
+  flags: UiFlag[],
+  verdictLabelText: string,
+): string {
+  const high = countFlags(flags, "high");
+  const med = countFlags(flags, "med");
+  const low = countFlags(flags, "low");
+  const driver =
+    flags.find((f) => f.severity === "high") ??
+    flags.find((f) => f.severity === "med") ??
+    flags[0];
+  const driverText = driver ? ` Primary driver: ${driver.title.toLowerCase()}.` : "";
+  if (score < 35) {
+    return `Composite score of ${score}/100 reflects ${high} critical and ${med} medium risk flags that materially undermine underwriting. The deal screens as ${verdictLabelText}.${driverText}`;
+  }
+  if (score < 65) {
+    return `Composite score of ${score}/100 indicates a borderline profile — ${high} critical, ${med} medium, ${low} low flags. Proceed with structural protection.${driverText}`;
+  }
+  return `Composite score of ${score}/100 reflects clean fundamentals with only ${med + low} minor flags and no critical risks.${driverText}`;
+}
+
+function businessImpactForFlag(flag: UiFlag): string {
+  if (flag.linkedMetric === "dscr")
+    return "Lender covenant break risk; refinance pressure and potential equity recapitalization in years 2-3.";
+  if (flag.linkedMetric === "rent")
+    return "Pro-forma revenue may overshoot achievable rents, eroding NOI and exit value at sale.";
+  if (flag.linkedMetric === "vacancy")
+    return "New supply absorbs incremental demand, extending lease-up and pressuring concessions.";
+  if (flag.linkedMetric === "capex")
+    return "Budget gap forces incremental owner capital or unfinished unit upgrades that miss premium pricing.";
+  return "Underwriting downside not absorbed by current deal structure; reduces probability of base-case returns.";
+}
+
+function recommendationForFlag(flag: UiFlag): string {
+  if (flag.linkedMetric === "dscr")
+    return "Negotiate a purchase price reduction to right-size the loan or secure an interest-rate buy-down at closing.";
+  if (flag.linkedMetric === "rent")
+    return "Re-underwrite to submarket trend (≈ 2-3% growth) and stress-test IRR before submitting LOI.";
+  if (flag.linkedMetric === "vacancy")
+    return "Extend lease-up assumptions by 6-9 months and add a concession reserve to the operating budget.";
+  if (flag.linkedMetric === "capex")
+    return "Request seller credit for the renovation gap or descope premium-unit count to match available budget.";
+  return "Add structural protection in the LOI: contingency reserves, earn-outs, or staged closing.";
+}
+
+interface ExecutiveSummary {
+  recommendation: string;
+  tone: "destructive" | "warning" | "success";
+  confidence: number;
+  reasons: string[];
+  adjustmentLow: number;
+  adjustmentHigh: number;
+  summary: string;
+}
+
+function buildExecutiveSummary(
+  score: number,
+  flags: UiFlag[],
+  opps: NegotiationOpportunity[],
+  dealTitle: string,
+): ExecutiveSummary {
+  const v = verdictLabel(score);
+  const confidence = Math.min(98, Math.max(55, Math.round(55 + Math.abs(score - 50) * 0.9)));
+  const sorted = [...flags].sort((a, b) => {
+    const rank = { high: 0, med: 1, low: 2 } as const;
+    return rank[a.severity] - rank[b.severity];
+  });
+  const reasons = sorted.slice(0, 3).map((f) => f.title);
+  while (reasons.length < 3) {
+    reasons.push(
+      score >= 65
+        ? "No critical underwriting breaks detected"
+        : "Supporting risk factors within tolerance",
+    );
+  }
+  const adjustmentLow = opps.reduce((s, o) => s + o.suggested_price_reduction_low_usd, 0);
+  const adjustmentHigh = opps.reduce((s, o) => s + o.suggested_price_reduction_high_usd, 0);
+  const verdictPhrase =
+    v.tone === "destructive"
+      ? "fails core underwriting tests and is not recommended at current pricing"
+      : v.tone === "warning"
+        ? "is investable only with price concessions and structural protection"
+        : "screens as a strong base-case investment with limited downside";
+  const summary = `${dealTitle} ${verdictPhrase}. Composite risk score is ${score}/100 with ${countFlags(flags, "high")} critical and ${countFlags(flags, "med")} medium flags identified by the rule engine.`;
+  return {
+    recommendation: v.label,
+    tone: v.tone,
+    confidence,
+    reasons,
+    adjustmentLow,
+    adjustmentHigh,
+    summary,
+  };
+}
+
 function Dashboard() {
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>("dscr");
   const [selectedFlag, setSelectedFlag] = useState<string>("");
@@ -248,6 +361,7 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeStep, setAnalyzeStep] = useState(0);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [analystNotes, setAnalystNotes] = useState("");
   const [exporting, setExporting] = useState(false);
@@ -286,7 +400,12 @@ function Dashboard() {
   const analyzeDeal = useCallback(async () => {
     if (!pendingFile) return;
     setAnalyzing(true);
+    setAnalyzeStep(0);
     setAnalyzeError(null);
+    // Drive the step animation independently of the network call.
+    const interval = window.setInterval(() => {
+      setAnalyzeStep((s) => (s < ANALYZE_STEPS.length - 2 ? s + 1 : s));
+    }, 700);
     try {
       const formData = new FormData();
       formData.append("file", pendingFile);
@@ -303,9 +422,13 @@ function Dashboard() {
         setSelectedNegotiation(negotiation.opportunities[0].id);
       }
       setPendingFile(null);
+      setAnalyzeStep(ANALYZE_STEPS.length - 1);
+      // Let the user see the "Complete." state briefly before closing.
+      await new Promise((r) => setTimeout(r, 600));
     } catch (err) {
       setAnalyzeError(err instanceof Error ? err.message : "Failed to analyze deal");
     } finally {
+      window.clearInterval(interval);
       setAnalyzing(false);
     }
   }, [pendingFile]);
@@ -331,6 +454,15 @@ function Dashboard() {
   const unitCount = engine?.deal.property_metadata?.unit_count;
   const location = engine?.deal.property_metadata?.location ?? "";
   const submarket = engine?.deal.market_context?.submarket ?? "";
+
+  const execSummary = useMemo(
+    () => buildExecutiveSummary(score, uiFlags, negotiationOpportunities, dealTitle),
+    [score, uiFlags, negotiationOpportunities, dealTitle],
+  );
+  const riskExplanation = useMemo(
+    () => riskScoreExplanation(score, uiFlags, verdict.label),
+    [score, uiFlags, verdict.label],
+  );
 
   const acceptFiles = useCallback((incoming: File[]) => {
     const pdf = incoming.find((f) => f.name.toLowerCase().endsWith(".pdf"));
@@ -439,7 +571,14 @@ function Dashboard() {
         </div>
       </header>
 
+      {analyzing && <AnalyzeOverlay step={analyzeStep} />}
+
       <main className="grid grid-cols-12 gap-4 p-4">
+        {/* Executive Summary */}
+        <section className="col-span-12">
+          <ExecutiveSummaryCard data={execSummary} />
+        </section>
+
         {/* Sidebar — Deal Ingestion Hub */}
         <aside className="col-span-12 lg:col-span-3">
           <section className="rounded-xl border border-border bg-panel p-4">
@@ -642,6 +781,11 @@ function Dashboard() {
               <RiskDial score={score} />
             </div>
 
+            <p className="mb-3 rounded-md bg-elevated/60 p-2.5 text-[11px] leading-relaxed text-muted-foreground">
+              {riskExplanation}
+            </p>
+
+
             <div
               className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 ring-1 ${
                 verdict.tone === "destructive"
@@ -719,33 +863,86 @@ function Dashboard() {
             </button>
             {whyNotOpen && (
               <div className="space-y-3 p-4">
-                <ul className="space-y-2">
-                  {ruleJustifications.map((text, idx) => (
-                    <li
-                      key={idx}
-                      className="flex gap-2 rounded-lg bg-elevated p-3 text-xs leading-relaxed text-muted-foreground"
-                    >
-                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-warning/15 text-[10px] font-semibold text-warning">
-                        {idx + 1}
-                      </span>
-                      <span>{text}</span>
-                    </li>
-                  ))}
-                </ul>
-                {activeFlag && activeMetric && (
-                  <div className="rounded-lg bg-elevated p-3">
-                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">
-                      Selected flag · {activeMetric.label}
-                    </div>
-                    <div className="mt-1 text-sm font-semibold">{activeFlag.title}</div>
-                    <div className="mt-1 flex items-baseline gap-2">
-                      <span className="text-lg font-semibold">{activeMetric.value}</span>
-                      <span className="text-[11px] text-muted-foreground">
-                        {activeMetric.delta}
-                      </span>
-                    </div>
-                  </div>
+                {uiFlags.length === 0 && (
+                  <p className="rounded-lg bg-elevated p-3 text-xs text-muted-foreground">
+                    No risk flags triggered for this deal.
+                  </p>
                 )}
+                <ul className="space-y-3">
+                  {uiFlags.map((f) => {
+                    const sev =
+                      f.severity === "high"
+                        ? {
+                            label: "HIGH RISK",
+                            text: "text-destructive",
+                            bg: "bg-destructive/10",
+                            ring: "ring-destructive/40",
+                            chip: "bg-destructive/15 text-destructive",
+                          }
+                        : f.severity === "med"
+                          ? {
+                              label: "MEDIUM RISK",
+                              text: "text-warning",
+                              bg: "bg-warning/5",
+                              ring: "ring-warning/30",
+                              chip: "bg-warning/15 text-warning",
+                            }
+                          : {
+                              label: "LOW RISK",
+                              text: "text-info",
+                              bg: "bg-info/5",
+                              ring: "ring-info/30",
+                              chip: "bg-info/15 text-info",
+                            };
+                    const isActive = activeFlag?.id === f.id;
+                    return (
+                      <li key={f.id}>
+                        <button
+                          onClick={() => {
+                            setSelectedFlag(isActive ? "" : f.id);
+                            setSelectedMetric(f.linkedMetric);
+                          }}
+                          className={`w-full rounded-lg p-3 text-left ring-1 transition ${sev.bg} ${sev.ring} ${isActive ? "ring-2" : "hover:ring-2"}`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span
+                              className={`rounded px-1.5 py-0.5 text-[10px] font-semibold tracking-wide ${sev.chip}`}
+                            >
+                              {sev.label}
+                            </span>
+                            <AlertTriangle className={`h-3.5 w-3.5 ${sev.text}`} />
+                          </div>
+                          <h3 className="mt-2 text-sm font-semibold text-foreground">
+                            {f.title}
+                          </h3>
+                          <p className="mt-1 text-[11px] leading-relaxed text-muted-foreground">
+                            {f.body}
+                          </p>
+                          <div className="mt-2.5 grid gap-2 text-[11px]">
+                            <div className="rounded-md bg-background/50 p-2">
+                              <div className="flex items-center gap-1.5 text-muted-foreground">
+                                <Target className="h-3 w-3" />
+                                <span className="uppercase tracking-wide">Business impact</span>
+                              </div>
+                              <p className="mt-1 leading-relaxed text-foreground/90">
+                                {businessImpactForFlag(f)}
+                              </p>
+                            </div>
+                            <div className="rounded-md bg-background/50 p-2">
+                              <div className="flex items-center gap-1.5 text-muted-foreground">
+                                <Lightbulb className="h-3 w-3" />
+                                <span className="uppercase tracking-wide">Recommendation</span>
+                              </div>
+                              <p className="mt-1 leading-relaxed text-foreground/90">
+                                {recommendationForFlag(f)}
+                              </p>
+                            </div>
+                          </div>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               </div>
             )}
           </div>
@@ -889,6 +1086,151 @@ function RiskDial({ score }: { score: number }) {
         <span className="mt-1 text-[10px] uppercase tracking-wider text-muted-foreground">
           Composite Risk
         </span>
+      </div>
+    </div>
+  );
+}
+
+function ExecutiveSummaryCard({ data }: { data: ExecutiveSummary }) {
+  const toneStyles =
+    data.tone === "destructive"
+      ? {
+          ring: "border-destructive/40",
+          chip: "bg-destructive/15 text-destructive ring-destructive/40",
+          accent: "text-destructive",
+          bar: "bg-destructive",
+        }
+      : data.tone === "warning"
+        ? {
+            ring: "border-warning/40",
+            chip: "bg-warning/15 text-warning ring-warning/40",
+            accent: "text-warning",
+            bar: "bg-warning",
+          }
+        : {
+            ring: "border-success/40",
+            chip: "bg-success/15 text-success ring-success/40",
+            accent: "text-success",
+            bar: "bg-success",
+          };
+  const hasAdjustment = data.adjustmentLow > 0 || data.adjustmentHigh > 0;
+  const fmt = (n: number) =>
+    n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)}M` : `$${Math.round(n).toLocaleString()}`;
+
+  return (
+    <div className={`rounded-xl border bg-panel p-5 ${toneStyles.ring}`}>
+      <div className="flex items-center gap-2">
+        <Sparkles className={`h-4 w-4 ${toneStyles.accent}`} />
+        <h2 className="text-sm font-semibold">Executive Summary</h2>
+        <span className="ml-2 text-[11px] text-muted-foreground">AI-generated overview</span>
+      </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-12">
+        <div className="md:col-span-3 flex flex-col gap-3">
+          <div
+            className={`flex items-center justify-between gap-2 rounded-lg px-3 py-3 ring-1 ${toneStyles.chip}`}
+          >
+            <div className="text-[10px] uppercase tracking-wider opacity-80">Recommendation</div>
+            <div className="text-xl font-bold tracking-wider">{data.recommendation}</div>
+          </div>
+          <div className="rounded-lg bg-elevated p-3">
+            <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <Gauge className="h-3 w-3" /> Confidence
+              </span>
+              <span className={`text-sm font-semibold ${toneStyles.accent}`}>
+                {data.confidence}%
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-background">
+              <div
+                className={`h-full ${toneStyles.bar}`}
+                style={{ width: `${data.confidence}%` }}
+              />
+            </div>
+          </div>
+          <div className="rounded-lg bg-elevated p-3">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+              <DollarSign className="h-3 w-3" /> Suggested price adjustment
+            </div>
+            <div className="mt-1 text-base font-semibold text-foreground">
+              {hasAdjustment
+                ? `${fmt(data.adjustmentLow)} – ${fmt(data.adjustmentHigh)}`
+                : "No adjustment required"}
+            </div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">
+              {hasAdjustment ? "Off list price (negotiation range)" : "Deal screens within tolerance"}
+            </div>
+          </div>
+        </div>
+
+        <div className="md:col-span-5 rounded-lg bg-elevated p-3">
+          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+            <Target className="h-3 w-3" /> Top 3 reasons
+          </div>
+          <ol className="mt-2 space-y-2">
+            {data.reasons.map((r, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs leading-relaxed">
+                <span
+                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${toneStyles.chip}`}
+                >
+                  {i + 1}
+                </span>
+                <span className="text-foreground/90">{r}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <div className="md:col-span-4 rounded-lg bg-elevated p-3">
+          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+            <FileText className="h-3 w-3" /> Investment summary
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{data.summary}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AnalyzeOverlay({ step }: { step: number }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm">
+      <div className="w-[min(440px,92vw)] rounded-xl border border-border bg-panel p-6 shadow-2xl">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <h2 className="text-sm font-semibold">AI Deal Analysis</h2>
+        </div>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Working through the offering memorandum…
+        </p>
+        <ul className="mt-4 space-y-2">
+          {ANALYZE_STEPS.map((label, idx) => {
+            const isDone = idx < step;
+            const isActive = idx === step;
+            return (
+              <li
+                key={label}
+                className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs ${
+                  isActive
+                    ? "bg-primary/10 text-foreground"
+                    : isDone
+                      ? "text-foreground/80"
+                      : "text-muted-foreground/60"
+                }`}
+              >
+                {isDone ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
+                ) : isActive ? (
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
+                ) : (
+                  <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-border" />
+                )}
+                <span>{label}</span>
+              </li>
+            );
+          })}
+        </ul>
       </div>
     </div>
   );

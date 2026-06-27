@@ -17,14 +17,14 @@ export interface DealPayload {
   merged_at?: string;
   source_pdf?: string;
   property_metadata?: {
-    property_name?: string;
-    unit_count?: number;
-    asset_type?: string;
-    location?: string;
+    property_name?: string | null;
+    unit_count?: number | null;
+    asset_type?: string | null;
+    location?: string | null;
   };
   financial_projections?: {
-    year_1?: { net_operating_income_usd?: number };
-    capital_expenditures?: { interior_renovation_budget_usd?: number };
+    year_1?: { net_operating_income_usd?: number | null };
+    capital_expenditures?: { interior_renovation_budget_usd?: number | null };
   };
   market_context?: {
     submarket?: string;
