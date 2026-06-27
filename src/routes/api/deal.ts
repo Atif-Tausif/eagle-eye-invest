@@ -1,14 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { evaluateDeal, type EnginePayload } from "@/lib/risk-engine";
-
-const DEAL_PATH = join(process.cwd(), "backend", "data", "current_deal.json");
+import dealData from "../../../backend/data/current_deal.json";
 
 async function loadEnginePayload(): Promise<EnginePayload> {
-  const raw = await readFile(DEAL_PATH, "utf-8");
-  const deal = JSON.parse(raw);
-  return evaluateDeal(deal);
+  return evaluateDeal(dealData);
 }
 
 export const Route = createFileRoute("/api/deal")({
