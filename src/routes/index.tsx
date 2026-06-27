@@ -361,6 +361,7 @@ function Dashboard() {
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [analyzing, setAnalyzing] = useState(false);
+  const [analyzeStep, setAnalyzeStep] = useState(0);
   const [analyzeError, setAnalyzeError] = useState<string | null>(null);
   const [analystNotes, setAnalystNotes] = useState("");
   const [exporting, setExporting] = useState(false);
