@@ -75,6 +75,7 @@ function regexMetadata(text: string) {
   const locationMatch = text.match(
     /\b([A-Z][A-Za-z .'-]+,\s*(?:AL|AK|AZ|AR|CA|CO|CT|DE|FL|GA|IL|IN|IA|KS|KY|LA|MA|MD|ME|MI|MN|MO|MS|NC|ND|NE|NH|NJ|NM|NV|NY|OH|OK|OR|PA|SC|SD|TN|TX|UT|VA|VT|WA|WI|WV|WY))\b/,
   );
+  const zipMatch = text.match(/\b(\d{5})(?:-\d{4})?\b/);
   const titleMatch =
     text.match(/([A-Z][A-Za-z0-9&,' -]+(?:Apartment|Apartments|Community)[A-Za-z0-9&,' -]*)/) ??
     text.match(/([A-Z][A-Za-z0-9&,' -]{12,80})/);
@@ -83,6 +84,7 @@ function regexMetadata(text: string) {
     unit_count: unitMatch ? Number.parseInt(unitMatch[1], 10) : null,
     asset_type: assetMatch?.[1] ?? (unitMatch ? "Apartment Community" : null),
     location: locationMatch?.[1] ?? null,
+    zip_code: zipMatch?.[1] ?? null,
   };
 }
 
@@ -109,7 +111,7 @@ async function extractMetadata(coverText: string) {
   const fallback = regexMetadata(coverText);
   try {
     const raw = await callGroq(
-      `Extract property metadata from this Offering Memorandum text.\n\nReturn JSON with exactly these keys:\n{\n  "property_name": string | null,\n  "unit_count": number | null,\n  "asset_type": string | null,\n  "location": string | null\n}\n\nText:\n${coverText.slice(0, 4000)}`,
+      `Extract property metadata from this Offering Memorandum text.\n\nReturn JSON with exactly these keys:\n{\n  "property_name": string | null,\n  "unit_count": number | null,\n  "asset_type": string | null,\n  "location": string | null,\n  "zip_code": string | null\n}\n\nFor zip_code, extract the 5-digit US ZIP code from the property address. Return null if not found.\n\nText:\n${coverText.slice(0, 4000)}`,
     );
     return { ...fallback, ...JSON.parse(raw) };
   } catch {
@@ -179,7 +181,7 @@ export const Route = createFileRoute("/api/upload-om")({
                 { label: "Interior Renovation Budget", year_1_usd: reno },
               ],
             },
-            market_context: getMarketContext("DuPage County"),
+            market_context: await getMarketContext(meta.zip_code ?? "DuPage County"),
             derived_metrics: derived,
           };
 
