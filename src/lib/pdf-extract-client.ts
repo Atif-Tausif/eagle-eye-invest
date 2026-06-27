@@ -1,11 +1,15 @@
 /**
  * Client-side PDF text extraction using pdfjs-dist.
  * Runs in the browser where real web workers are available — no worker errors.
+ *
+ * We load the worker from unpkg CDN (version-locked) instead of bundling it
+ * locally. This avoids Vite asset-URL resolution differences between dev and
+ * Lovable's production CDN hosting.
  */
 import * as pdfjsLib from "pdfjs-dist";
-import pdfjsWorkerUrl from "pdfjs-dist/build/pdf.worker.mjs?url";
 
-pdfjsLib.GlobalWorkerOptions.workerSrc = pdfjsWorkerUrl;
+// unpkg CDN — version-locked to match the installed pdfjs-dist package
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://unpkg.com/pdfjs-dist@${pdfjsLib.version}/build/pdf.worker.mjs`;
 
 const FIN_KEYWORDS = /net\s+operating\s+income|NOI|pro\s+forma|renovation|capital\s+expenditure/i;
 const YEAR1_KEYWORDS = /year\s*1|yr\.?\s*1/i;
