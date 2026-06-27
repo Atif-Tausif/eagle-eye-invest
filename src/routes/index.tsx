@@ -510,15 +510,15 @@ function Dashboard() {
         throw new Error((err as { error?: string }).error ?? `Export failed (${res.status})`);
       }
 
-      const blob = await res.blob();
+      const html = await res.text();
+      const blob = new Blob([html], { type: "text/html;charset=utf-8" });
       const url = URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = "deal-memo.html";
-      document.body.appendChild(a);
-      a.click();
-      a.remove();
-      URL.revokeObjectURL(url);
+      const opened = window.open(url, "_blank", "noopener,noreferrer");
+      if (!opened) {
+        URL.revokeObjectURL(url);
+        throw new Error("Pop-up blocked. Allow pop-ups for this site to open the memo.");
+      }
+      window.setTimeout(() => URL.revokeObjectURL(url), 60_000);
     } catch (err) {
       setExportError(err instanceof Error ? err.message : "Export failed");
     } finally {
@@ -998,7 +998,7 @@ function Dashboard() {
                 className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/20 transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 <FileText className="h-4 w-4" />
-                {exporting ? "Generating…" : "Export PDF Deal Memo"}
+                {exporting ? "Generating…" : "Open Deal Memo"}
               </button>
               {exportError && <p className="text-[11px] text-destructive">{exportError}</p>}
               <button className="inline-flex items-center justify-center gap-2 rounded-md bg-purple px-4 py-2.5 text-sm font-medium text-purple-foreground transition hover:opacity-90">
