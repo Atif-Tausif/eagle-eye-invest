@@ -781,6 +781,11 @@ function Dashboard() {
               <RiskDial score={score} />
             </div>
 
+            <p className="mb-3 rounded-md bg-elevated/60 p-2.5 text-[11px] leading-relaxed text-muted-foreground">
+              {riskExplanation}
+            </p>
+
+
             <div
               className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 ring-1 ${
                 verdict.tone === "destructive"
