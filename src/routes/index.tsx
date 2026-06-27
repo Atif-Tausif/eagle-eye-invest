@@ -210,6 +210,9 @@ function Dashboard() {
   const [engine, setEngine] = useState<EnginePayload | null>(null);
   const [loading, setLoading] = useState(true);
   const [fetchError, setFetchError] = useState<string | null>(null);
+  const [analystNotes, setAnalystNotes] = useState("");
+  const [exporting, setExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -268,6 +271,40 @@ function Dashboard() {
     const dropped = Array.from(e.dataTransfer.files).map((f) => f.name);
     if (dropped.length) setFiles((prev) => [...prev, ...dropped]);
   }, []);
+
+  const exportMemo = useCallback(async () => {
+    setExporting(true);
+    setExportError(null);
+    try {
+      const body: Record<string, unknown> = {};
+      if (analystNotes.trim()) body.analyst_notes = analystNotes.trim();
+
+      const res = await fetch("/api/export-memo", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+
+      if (!res.ok) {
+        const err = await res.json().catch(() => ({}));
+        throw new Error((err as { error?: string }).error ?? `Export failed (${res.status})`);
+      }
+
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "deal-memo.pdf";
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      setExportError(err instanceof Error ? err.message : "Export failed");
+    } finally {
+      setExporting(false);
+    }
+  }, [analystNotes]);
 
   if (loading) {
     return (
@@ -546,9 +583,27 @@ function Dashboard() {
           <div className="col-span-12 lg:col-span-3 rounded-xl border border-border bg-panel p-4">
             <h2 className="mb-3 text-sm font-semibold">Actions</h2>
             <div className="flex flex-col gap-2.5">
-              <button className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground transition hover:bg-primary/90">
-                <FileText className="h-4 w-4" /> Export PDF Deal Memo
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] text-muted-foreground">Analyst notes (appended to memo)</label>
+                <textarea
+                  value={analystNotes}
+                  onChange={(e) => setAnalystNotes(e.target.value)}
+                  placeholder="Optional: add context, caveats, or IC commentary…"
+                  rows={3}
+                  className="w-full resize-none rounded-md border border-border bg-elevated px-3 py-2 text-xs text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary"
+                />
+              </div>
+              <button
+                onClick={exportMemo}
+                disabled={exporting}
+                className="inline-flex items-center justify-center gap-2 rounded-md bg-primary px-4 py-2.5 text-sm font-medium text-primary-foreground shadow-lg shadow-primary/20 transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                <FileText className="h-4 w-4" />
+                {exporting ? "Generating…" : "Export PDF Deal Memo"}
               </button>
+              {exportError && (
+                <p className="text-[11px] text-destructive">{exportError}</p>
+              )}
               <button className="inline-flex items-center justify-center gap-2 rounded-md bg-purple px-4 py-2.5 text-sm font-medium text-purple-foreground transition hover:opacity-90">
                 <Bookmark className="h-4 w-4" /> Save to Portfolio
               </button>

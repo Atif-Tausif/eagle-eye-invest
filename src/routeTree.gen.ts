@@ -10,11 +10,17 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiExportMemoRouteImport } from './routes/api/export-memo'
 import { Route as ApiDealRouteImport } from './routes/api/deal'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiExportMemoRoute = ApiExportMemoRouteImport.update({
+  id: '/api/export-memo',
+  path: '/api/export-memo',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiDealRoute = ApiDealRouteImport.update({
@@ -26,27 +32,31 @@ const ApiDealRoute = ApiDealRouteImport.update({
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/api/deal': typeof ApiDealRoute
+  '/api/export-memo': typeof ApiExportMemoRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/deal': typeof ApiDealRoute
+  '/api/export-memo': typeof ApiExportMemoRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
   '/api/deal': typeof ApiDealRoute
+  '/api/export-memo': typeof ApiExportMemoRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/deal'
+  fullPaths: '/' | '/api/deal' | '/api/export-memo'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/deal'
-  id: '__root__' | '/' | '/api/deal'
+  to: '/' | '/api/deal' | '/api/export-memo'
+  id: '__root__' | '/' | '/api/deal' | '/api/export-memo'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   ApiDealRoute: typeof ApiDealRoute
+  ApiExportMemoRoute: typeof ApiExportMemoRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -56,6 +66,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/export-memo': {
+      id: '/api/export-memo'
+      path: '/api/export-memo'
+      fullPath: '/api/export-memo'
+      preLoaderRoute: typeof ApiExportMemoRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/deal': {
@@ -71,6 +88,7 @@ declare module '@tanstack/react-router' {
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   ApiDealRoute: ApiDealRoute,
+  ApiExportMemoRoute: ApiExportMemoRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
