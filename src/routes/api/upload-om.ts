@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getMarketContext } from "@/lib/market-data";
+import { evaluateDeal } from "@/lib/risk-engine";
 
 // PDF extraction now happens client-side (browser has real web workers).
 // This route receives pre-extracted text sections and calls Groq.
@@ -182,7 +183,7 @@ export const Route = createFileRoute("/api/upload-om")({
             derived_metrics: derived,
           };
 
-          return new Response(JSON.stringify(deal), {
+          return new Response(JSON.stringify(evaluateDeal(deal)), {
             headers: { "Content-Type": "application/json" },
           });
         } catch (err) {
