@@ -400,7 +400,12 @@ function Dashboard() {
   const analyzeDeal = useCallback(async () => {
     if (!pendingFile) return;
     setAnalyzing(true);
+    setAnalyzeStep(0);
     setAnalyzeError(null);
+    // Drive the step animation independently of the network call.
+    const interval = window.setInterval(() => {
+      setAnalyzeStep((s) => (s < ANALYZE_STEPS.length - 2 ? s + 1 : s));
+    }, 700);
     try {
       const formData = new FormData();
       formData.append("file", pendingFile);
@@ -417,9 +422,13 @@ function Dashboard() {
         setSelectedNegotiation(negotiation.opportunities[0].id);
       }
       setPendingFile(null);
+      setAnalyzeStep(ANALYZE_STEPS.length - 1);
+      // Let the user see the "Complete." state briefly before closing.
+      await new Promise((r) => setTimeout(r, 600));
     } catch (err) {
       setAnalyzeError(err instanceof Error ? err.message : "Failed to analyze deal");
     } finally {
+      window.clearInterval(interval);
       setAnalyzing(false);
     }
   }, [pendingFile]);
