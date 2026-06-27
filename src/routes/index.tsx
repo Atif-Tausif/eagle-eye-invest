@@ -20,6 +20,7 @@ import {
   Flag,
   Activity,
 } from "lucide-react";
+import { DealAiChat } from "@/components/deal-ai-chat";
 import type { DealPayload, EnginePayload, RiskFlag } from "@/lib/risk-engine";
 
 export const Route = createFileRoute("/")({
@@ -625,6 +626,8 @@ function Dashboard() {
           </div>
         </section>
       </main>
+
+      <DealAiChat />
     </div>
   );
 }
