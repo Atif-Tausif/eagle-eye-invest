@@ -1,13 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { createRequire } from "node:module";
-import { pathToFileURL } from "node:url";
 import { getMarketContext } from "@/lib/market-data";
 import { evaluateDeal } from "@/lib/risk-engine";
-
-const require = createRequire(import.meta.url);
-const PDFJS_WORKER_SRC = pathToFileURL(
-  require.resolve("pdfjs-dist/legacy/build/pdf.worker.mjs"),
-).href;
 
 const GROQ_API_KEY = typeof process !== "undefined" && process.env.GROQ_API_KEY;
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
@@ -19,8 +12,8 @@ const GROQ_MODEL = "llama-3.3-70b-versatile";
 
 async function extractPdfPages(bytes: Uint8Array): Promise<string[]> {
   const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs" as string);
-  (pdfjsLib as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc =
-    PDFJS_WORKER_SRC;
+  // Empty string disables the web worker — required for Node.js / Nitro
+  (pdfjsLib as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc = "";
 
   const loadingTask = (
     pdfjsLib as {
