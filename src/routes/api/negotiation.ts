@@ -1,14 +1,9 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { readFile } from "node:fs/promises";
-import { join } from "node:path";
 import { evaluateNegotiationOpportunities, type NegotiationPayload } from "@/lib/negotiation-engine";
-
-const DEAL_PATH = join(process.cwd(), "backend", "data", "current_deal.json");
+import dealDataRaw from "../../../backend/data/current_deal.json";
 
 async function loadNegotiationPayload(): Promise<NegotiationPayload> {
-  const raw = await readFile(DEAL_PATH, "utf-8");
-  const deal = JSON.parse(raw);
-  return evaluateNegotiationOpportunities(deal);
+  return evaluateNegotiationOpportunities(dealDataRaw);
 }
 
 export const Route = createFileRoute("/api/negotiation")({
