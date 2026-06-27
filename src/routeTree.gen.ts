@@ -10,6 +10,8 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as ApiUploadOmRouteImport } from './routes/api/upload-om'
+import { Route as ApiNegotiationRouteImport } from './routes/api/negotiation'
 import { Route as ApiExportMemoRouteImport } from './routes/api/export-memo'
 import { Route as ApiDealRouteImport } from './routes/api/deal'
 import { Route as ApiChatRouteImport } from './routes/api/chat'
@@ -17,6 +19,16 @@ import { Route as ApiChatRouteImport } from './routes/api/chat'
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiUploadOmRoute = ApiUploadOmRouteImport.update({
+  id: '/api/upload-om',
+  path: '/api/upload-om',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiNegotiationRoute = ApiNegotiationRouteImport.update({
+  id: '/api/negotiation',
+  path: '/api/negotiation',
   getParentRoute: () => rootRouteImport,
 } as any)
 const ApiExportMemoRoute = ApiExportMemoRouteImport.update({
@@ -40,12 +52,16 @@ export interface FileRoutesByFullPath {
   '/api/chat': typeof ApiChatRoute
   '/api/deal': typeof ApiDealRoute
   '/api/export-memo': typeof ApiExportMemoRoute
+  '/api/negotiation': typeof ApiNegotiationRoute
+  '/api/upload-om': typeof ApiUploadOmRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/api/chat': typeof ApiChatRoute
   '/api/deal': typeof ApiDealRoute
   '/api/export-memo': typeof ApiExportMemoRoute
+  '/api/negotiation': typeof ApiNegotiationRoute
+  '/api/upload-om': typeof ApiUploadOmRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -53,13 +69,34 @@ export interface FileRoutesById {
   '/api/chat': typeof ApiChatRoute
   '/api/deal': typeof ApiDealRoute
   '/api/export-memo': typeof ApiExportMemoRoute
+  '/api/negotiation': typeof ApiNegotiationRoute
+  '/api/upload-om': typeof ApiUploadOmRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/api/chat' | '/api/deal' | '/api/export-memo'
+  fullPaths:
+    | '/'
+    | '/api/chat'
+    | '/api/deal'
+    | '/api/export-memo'
+    | '/api/negotiation'
+    | '/api/upload-om'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/api/chat' | '/api/deal' | '/api/export-memo'
-  id: '__root__' | '/' | '/api/chat' | '/api/deal' | '/api/export-memo'
+  to:
+    | '/'
+    | '/api/chat'
+    | '/api/deal'
+    | '/api/export-memo'
+    | '/api/negotiation'
+    | '/api/upload-om'
+  id:
+    | '__root__'
+    | '/'
+    | '/api/chat'
+    | '/api/deal'
+    | '/api/export-memo'
+    | '/api/negotiation'
+    | '/api/upload-om'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -67,6 +104,8 @@ export interface RootRouteChildren {
   ApiChatRoute: typeof ApiChatRoute
   ApiDealRoute: typeof ApiDealRoute
   ApiExportMemoRoute: typeof ApiExportMemoRoute
+  ApiNegotiationRoute: typeof ApiNegotiationRoute
+  ApiUploadOmRoute: typeof ApiUploadOmRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -76,6 +115,20 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/upload-om': {
+      id: '/api/upload-om'
+      path: '/api/upload-om'
+      fullPath: '/api/upload-om'
+      preLoaderRoute: typeof ApiUploadOmRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/negotiation': {
+      id: '/api/negotiation'
+      path: '/api/negotiation'
+      fullPath: '/api/negotiation'
+      preLoaderRoute: typeof ApiNegotiationRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/api/export-memo': {
@@ -107,6 +160,8 @@ const rootRouteChildren: RootRouteChildren = {
   ApiChatRoute: ApiChatRoute,
   ApiDealRoute: ApiDealRoute,
   ApiExportMemoRoute: ApiExportMemoRoute,
+  ApiNegotiationRoute: ApiNegotiationRoute,
+  ApiUploadOmRoute: ApiUploadOmRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

@@ -16,6 +16,15 @@ dist-ssr
 .nitro
 *.local
 
+# Environment & secrets — never commit real keys
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+secrets.json
+
 # Wrangler / Cloudflare
 .wrangler/
 .dev.vars
