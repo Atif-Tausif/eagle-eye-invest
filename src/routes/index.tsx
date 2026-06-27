@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Upload,
   ArrowRight,
@@ -20,6 +20,7 @@ import {
   Flag,
   Activity,
 } from "lucide-react";
+import type { DealPayload, EnginePayload, RiskFlag } from "@/lib/risk-engine";
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -34,37 +35,26 @@ export const Route = createFileRoute("/")({
 });
 
 type MetricKey = "occupancy" | "dscr" | "expense" | "rent" | "vacancy" | "capex";
+type MetricStatus = "good" | "warn" | "bad";
+type FlagSeverity = "high" | "med" | "low";
 
-const METRICS: Array<{
+interface MetricCard {
   key: MetricKey;
   label: string;
   value: string;
   delta: string;
-  status: "good" | "warn" | "bad";
+  status: MetricStatus;
   icon: React.ComponentType<{ className?: string }>;
   detail: string;
-}> = [
-  { key: "occupancy", label: "Occupancy", value: "87.4%", delta: "-4.2% vs submarket", status: "warn", icon: Building2,
-    detail: "Trailing 3-month occupancy of 87.4% trails the submarket average of 91.6%. Concession burn-off in Q2 may have suppressed renewals; T-12 turnover sits at 58%." },
-  { key: "dscr", label: "DSCR", value: "1.08x", delta: "Below 1.25x covenant", status: "bad", icon: Activity,
-    detail: "Year-1 DSCR of 1.08x falls below typical agency covenant of 1.25x. Stressed at +100bps rate, DSCR drops to 0.94x. Insufficient cushion for variable-rate debt." },
-  { key: "expense", label: "Expense Ratio", value: "54.2%", delta: "+6pts vs peer set", status: "bad", icon: Percent,
-    detail: "Operating expense ratio of 54.2% materially exceeds the 1980s-vintage Class B peer median of 48%. Payroll and R&M are the primary drivers." },
-  { key: "rent", label: "Rent Growth Pro-forma", value: "5.8% / yr", delta: "Submarket trend: 2.1%", status: "bad", icon: TrendingUp,
-    detail: "Sponsor pro-forma assumes 5.8% annual rent growth through Year 5. CoStar submarket trend is 2.1% with elevated supply pipeline of 1,840 units delivering by 2027." },
-  { key: "vacancy", label: "Market Vacancy Delta", value: "+310 bps", delta: "Worsening", status: "warn", icon: TrendingDown,
-    detail: "Submarket vacancy has expanded 310 bps over the trailing 12 months as new Class A deliveries pull renters up-market. Lease-up at the property is decelerating." },
-  { key: "capex", label: "CapEx Budget", value: "$3.4K / unit", delta: "Below renovation scope", status: "warn", icon: Wrench,
-    detail: "Budgeted $3,400/unit for interior renovations is light versus the $5,800-$7,200/unit needed to achieve the underwritten $185 premium based on comp scopes." },
-];
+}
 
-const FLAGS = [
-  { id: "f1", severity: "high" as const, title: "DSCR below covenant threshold", body: "Year-1 DSCR of 1.08x violates the 1.25x minimum DSCR covenant on the agency debt quote. Refinance risk in Year 3 is materially elevated.", linkedMetric: "dscr" as MetricKey },
-  { id: "f2", severity: "high" as const, title: "Rent growth assumption disconnected from submarket", body: "Sponsor underwrites 5.8% annual rent growth through stabilization while CoStar reports 2.1% trailing growth and 1,840 competing units in lease-up.", linkedMetric: "rent" as MetricKey },
-  { id: "f3", severity: "med" as const, title: "Expense ratio outlier vs peer set", body: "54.2% expense ratio vs 48% peer median. Payroll at $1,180/unit is 22% above benchmark for a 184-unit asset under third-party management.", linkedMetric: "expense" as MetricKey },
-  { id: "f4", severity: "med" as const, title: "CapEx scope under-funded for premiums", body: "$3,400/unit interior CapEx is insufficient to deliver the $185 renovation premium underwritten in the value-add pro-forma.", linkedMetric: "capex" as MetricKey },
-  { id: "f5", severity: "low" as const, title: "Occupancy lag vs submarket", body: "T-3 occupancy of 87.4% trails submarket by 420bps. Concession burn and elevated turnover suggest operational drag, not just market softness.", linkedMetric: "occupancy" as MetricKey },
-];
+interface UiFlag {
+  id: string;
+  severity: FlagSeverity;
+  title: string;
+  body: string;
+  linkedMetric: MetricKey;
+}
 
 const MEMO_SECTIONS: Array<{ key: string; label: string; body: string }> = [
   { key: "demand", label: "Demand Analysis",
@@ -79,13 +69,198 @@ const MEMO_SECTIONS: Array<{ key: string; label: string; body: string }> = [
     body: "Year-5 exit underwritten at a 5.25% cap on stabilized NOI, representing 35bps of cap compression from entry. Given supply pipeline and interest rate forward curve, a flat-to-25bps decompression scenario is more defensible, which compresses the IRR from 16.4% UW to ~9.8% — below typical LP return thresholds for value-add multifamily." },
 ];
 
+function flagSeverity(severity: RiskFlag["severity"]): FlagSeverity {
+  if (severity === "Critical Risk") return "high";
+  if (severity === "Medium Risk") return "med";
+  return "low";
+}
+
+function linkedMetricForFlag(flag: RiskFlag): MetricKey {
+  if (flag.id.startsWith("dscr")) return "dscr";
+  if (flag.id.startsWith("rent")) return "rent";
+  if (flag.id.startsWith("vacancy")) return "vacancy";
+  return "dscr";
+}
+
+function buildMetrics(payload: EnginePayload): MetricCard[] {
+  const { deal } = payload;
+  const dscrFlag = payload.flags.find((f) => f.id.startsWith("dscr"));
+  const rentFlag = payload.flags.find((f) => f.id.startsWith("rent"));
+  const dscr = (dscrFlag?.metrics.dscr as number | undefined) ?? 0;
+  const proForma = (rentFlag?.metrics.pro_forma_rent_growth_pct as number | undefined) ?? 5.8;
+  const submarketRent = (rentFlag?.metrics.submarket_rent_growth_avg_pct as number | undefined)
+    ?? deal.market_context?.rent_growth_trailing_3yr?.trailing_3yr_cagr_pct
+    ?? 0;
+
+  const occupancy = deal.market_context?.submarket_occupancy?.average_occupancy_pct ?? 0;
+  const occChangeBps = deal.market_context?.submarket_occupancy?.trailing_12mo_change_bps ?? 0;
+  const economicVacancy = deal.market_context?.submarket_occupancy?.economic_vacancy_pct ?? 0;
+  const pipelineUnits =
+    deal.market_context?.construction_pipeline?.summary?.delivering_through_2027_units ?? 0;
+  const renoPerUnit = deal.derived_metrics?.reno_cost_per_unit_usd ?? 0;
+  const noiPerUnit = deal.derived_metrics?.noi_per_unit_usd ?? 0;
+  const netCfAfterCapex = deal.derived_metrics?.net_cash_flow_after_capex_usd ?? 0;
+
+  const dscrStatus: MetricStatus =
+    dscr < 1.15 ? "bad" : dscr < 1.25 ? "warn" : "good";
+  const rentGap = proForma - submarketRent;
+  const rentStatus: MetricStatus =
+    rentGap > 4 ? "bad" : rentGap > 2 ? "warn" : "good";
+  const occStatus: MetricStatus = occChangeBps < -50 ? "warn" : "good";
+  const vacancyStatus: MetricStatus =
+    occChangeBps <= -100 ? "bad" : occChangeBps < -50 ? "warn" : "good";
+
+  return [
+    {
+      key: "occupancy",
+      label: "Occupancy",
+      value: `${occupancy.toFixed(1)}%`,
+      delta: `${occChangeBps >= 0 ? "+" : ""}${(occChangeBps / 100).toFixed(1)}% T-12 submarket`,
+      status: occStatus,
+      icon: Building2,
+      detail: `Submarket average occupancy is ${occupancy.toFixed(1)}% (${submarketName(deal)}). Trailing 12-month change of ${occChangeBps} bps reflects concession pressure and new supply deliveries.`,
+    },
+    {
+      key: "dscr",
+      label: "DSCR",
+      value: `${dscr.toFixed(2)}x`,
+      delta: dscr < 1.25 ? "Below 1.25x covenant" : "Above covenant",
+      status: dscrStatus,
+      icon: Activity,
+      detail: dscrFlag?.justification
+        ?? `Year-1 DSCR of ${dscr.toFixed(2)}x computed from parsed NOI of $${year1Noi(deal).toLocaleString()}.`,
+    },
+    {
+      key: "expense",
+      label: "NOI / Unit",
+      value: noiPerUnit ? `$${Math.round(noiPerUnit).toLocaleString()}` : "—",
+      delta: netCfAfterCapex
+        ? `$${Math.round(netCfAfterCapex / 1_000_000).toFixed(2)}M after CapEx`
+        : "Net CF after CapEx",
+      status: "good",
+      icon: Percent,
+      detail: `Year-1 NOI per unit is $${Math.round(noiPerUnit).toLocaleString()} across ${deal.property_metadata?.unit_count ?? "—"} units. Net cash flow after interior renovation budget is $${netCfAfterCapex.toLocaleString()}.`,
+    },
+    {
+      key: "rent",
+      label: "Rent Growth Pro-forma",
+      value: `${proForma.toFixed(1)}% / yr`,
+      delta: `Submarket avg: ${submarketRent.toFixed(1)}%`,
+      status: rentStatus,
+      icon: TrendingUp,
+      detail: rentFlag?.justification
+        ?? `Pro-forma rent growth of ${proForma.toFixed(1)}% vs ${submarketRent.toFixed(1)}% submarket 3-year average.`,
+    },
+    {
+      key: "vacancy",
+      label: "Economic Vacancy",
+      value: `${economicVacancy.toFixed(1)}%`,
+      delta: pipelineUnits ? `${pipelineUnits.toLocaleString()} units by 2027` : "Pipeline pressure",
+      status: vacancyStatus,
+      icon: TrendingDown,
+      detail: `Submarket economic vacancy is ${economicVacancy.toFixed(1)}%. ${pipelineUnits.toLocaleString()} competing units are in the construction pipeline through 2027, pressuring rent growth and concessions.`,
+    },
+    {
+      key: "capex",
+      label: "CapEx Budget",
+      value: renoPerUnit ? `$${(renoPerUnit / 1000).toFixed(1)}K / unit` : "—",
+      delta: renoPerUnit ? "Interior renovation scope" : "Not parsed",
+      status: renoPerUnit > 0 ? "warn" : "bad",
+      icon: Wrench,
+      detail: `Interior renovation budget of $${Math.abs(deal.financial_projections?.capital_expenditures?.interior_renovation_budget_usd ?? 0).toLocaleString()} ($${Math.round(renoPerUnit).toLocaleString()}/unit) sourced from OM financial projections.`,
+    },
+  ];
+}
+
+function buildUiFlags(flags: RiskFlag[]): UiFlag[] {
+  return flags.map((f) => ({
+    id: f.id,
+    severity: flagSeverity(f.severity),
+    title: f.title,
+    body: f.justification,
+    linkedMetric: linkedMetricForFlag(f),
+  }));
+}
+
+function submarketName(deal: DealPayload): string {
+  return deal.market_context?.submarket ?? "submarket";
+}
+
+function year1Noi(deal: DealPayload): number {
+  return deal.financial_projections?.year_1?.net_operating_income_usd ?? 0;
+}
+
+function verdictLabel(score: number): { label: string; tone: "destructive" | "warning" | "success" } {
+  if (score < 35) return { label: "NO-GO", tone: "destructive" };
+  if (score < 65) return { label: "CAUTION", tone: "warning" };
+  return { label: "GO", tone: "success" };
+}
+
+function countFlags(flags: UiFlag[], severity: FlagSeverity): number {
+  return flags.filter((f) => f.severity === severity).length;
+}
+
 function Dashboard() {
   const [selectedMetric, setSelectedMetric] = useState<MetricKey>("dscr");
-  const [selectedFlag, setSelectedFlag] = useState<string>("f1");
+  const [selectedFlag, setSelectedFlag] = useState<string>("");
   const [whyNotOpen, setWhyNotOpen] = useState(true);
   const [activeMemo, setActiveMemo] = useState<string>("financial");
   const [dragOver, setDragOver] = useState(false);
-  const [files, setFiles] = useState<string[]>(["OM_RiverPark_184u.pdf", "T-12_OperatingStatement.xlsx"]);
+  const [files, setFiles] = useState<string[]>([]);
+  const [engine, setEngine] = useState<EnginePayload | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadDeal() {
+      setLoading(true);
+      setFetchError(null);
+      try {
+        const res = await fetch("/api/deal");
+        if (!res.ok) {
+          const err = await res.json().catch(() => ({}));
+          throw new Error(err.error ?? `Failed to load deal (${res.status})`);
+        }
+        const data = (await res.json()) as EnginePayload;
+        if (cancelled) return;
+        setEngine(data);
+        if (data.flags.length) setSelectedFlag(data.flags[0].id);
+        const pdfName = data.deal.source_pdf?.split(/[/\\]/).pop();
+        if (pdfName) setFiles([pdfName]);
+      } catch (err) {
+        if (!cancelled) {
+          setFetchError(err instanceof Error ? err.message : "Failed to load deal payload");
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }
+
+    loadDeal();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const metrics = useMemo(() => (engine ? buildMetrics(engine) : []), [engine]);
+  const uiFlags = useMemo(() => (engine ? buildUiFlags(engine.flags) : []), [engine]);
+  const ruleJustifications = useMemo(
+    () => engine?.flags.map((f) => f.justification) ?? [],
+    [engine],
+  );
+  const score = engine?.score ?? 0;
+  const verdict = verdictLabel(score);
+
+  const activeMetric = metrics.find((m) => m.key === selectedMetric) ?? metrics[0];
+  const activeFlag = uiFlags.find((f) => f.id === selectedFlag) ?? uiFlags[0];
+  const activeMemoSection = MEMO_SECTIONS.find((m) => m.key === activeMemo)!;
+
+  const dealTitle = engine?.deal.property_metadata?.property_name ?? "Loading deal…";
+  const unitCount = engine?.deal.property_metadata?.unit_count;
+  const location = engine?.deal.property_metadata?.location ?? "";
+  const submarket = engine?.deal.market_context?.submarket ?? "";
 
   const onDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault();
@@ -94,9 +269,21 @@ function Dashboard() {
     if (dropped.length) setFiles((prev) => [...prev, ...dropped]);
   }, []);
 
-  const activeMetric = METRICS.find((m) => m.key === selectedMetric)!;
-  const activeFlag = FLAGS.find((f) => f.id === selectedFlag)!;
-  const activeMemoSection = MEMO_SECTIONS.find((m) => m.key === activeMemo)!;
+  if (loading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
+        Loading live deal engine…
+      </div>
+    );
+  }
+
+  if (fetchError || !engine) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-destructive">
+        {fetchError ?? "Deal payload unavailable"}
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background text-foreground">
@@ -113,7 +300,14 @@ function Dashboard() {
             </div>
           </div>
           <div className="flex items-center gap-4 text-xs text-muted-foreground">
-            <span className="hidden sm:inline">Deal: <span className="text-foreground">RiverPark Apartments · 184 units · Phoenix MSA</span></span>
+            <span className="hidden sm:inline">
+              Deal:{" "}
+              <span className="text-foreground">
+                {dealTitle.length > 48 ? `${dealTitle.slice(0, 48)}…` : dealTitle}
+                {unitCount ? ` · ${unitCount} units` : ""}
+                {location ? ` · ${location}` : submarket ? ` · ${submarket}` : ""}
+              </span>
+            </span>
             <span className="inline-flex h-2 w-2 rounded-full bg-success" />
             <span>Agent active</span>
           </div>
@@ -153,9 +347,9 @@ function Dashboard() {
             </button>
 
             <div className="mt-4 space-y-2 border-t border-border pt-3 text-[11px] text-muted-foreground">
-              <div className="flex justify-between"><span>Parsed pages</span><span className="text-foreground">142</span></div>
-              <div className="flex justify-between"><span>Confidence</span><span className="text-foreground">94%</span></div>
-              <div className="flex justify-between"><span>Run time</span><span className="text-foreground">38s</span></div>
+              <div className="flex justify-between"><span>Flags triggered</span><span className="text-foreground">{uiFlags.length}</span></div>
+              <div className="flex justify-between"><span>Risk score</span><span className="text-foreground">{score}/100</span></div>
+              <div className="flex justify-between"><span>Data as of</span><span className="text-foreground">{engine.deal.merged_at?.slice(0, 10) ?? "—"}</span></div>
             </div>
           </section>
         </aside>
@@ -164,7 +358,7 @@ function Dashboard() {
         <section className="col-span-12 lg:col-span-6 space-y-4">
           {/* Metric grid */}
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-            {METRICS.map((m) => {
+            {metrics.map((m) => {
               const Icon = m.icon;
               const active = selectedMetric === m.key;
               const statusColor =
@@ -192,14 +386,26 @@ function Dashboard() {
               <div className="flex items-center gap-2">
                 <Flag className="h-4 w-4 text-warning" />
                 <h2 className="text-sm font-semibold">Flag Feed</h2>
-                <span className="ml-2 rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-medium text-destructive">2 High</span>
-                <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium text-warning">2 Med</span>
-                <span className="rounded-full bg-info/15 px-2 py-0.5 text-[10px] font-medium text-info">1 Low</span>
+                {countFlags(uiFlags, "high") > 0 && (
+                  <span className="ml-2 rounded-full bg-destructive/15 px-2 py-0.5 text-[10px] font-medium text-destructive">
+                    {countFlags(uiFlags, "high")} High
+                  </span>
+                )}
+                {countFlags(uiFlags, "med") > 0 && (
+                  <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium text-warning">
+                    {countFlags(uiFlags, "med")} Med
+                  </span>
+                )}
+                {countFlags(uiFlags, "low") > 0 && (
+                  <span className="rounded-full bg-info/15 px-2 py-0.5 text-[10px] font-medium text-info">
+                    {countFlags(uiFlags, "low")} Low
+                  </span>
+                )}
               </div>
               <span className="text-[11px] text-muted-foreground">Live</span>
             </div>
             <ul className="divide-y divide-border">
-              {FLAGS.map((f) => {
+              {uiFlags.map((f) => {
                 const active = selectedFlag === f.id;
                 const sev =
                   f.severity === "high" ? { c: "text-destructive", bg: "bg-destructive/15", label: "HIGH" }
@@ -230,26 +436,36 @@ function Dashboard() {
 
         {/* Right — Risk Score */}
         <aside className="col-span-12 lg:col-span-3">
-          <section className="rounded-xl border border-destructive/40 bg-panel p-5">
+          <section className={`rounded-xl border bg-panel p-5 ${verdict.tone === "destructive" ? "border-destructive/40" : verdict.tone === "warning" ? "border-warning/40" : "border-success/40"}`}>
             <div className="flex items-center gap-2">
-              <ShieldAlert className="h-4 w-4 text-destructive" />
+              <ShieldAlert className={`h-4 w-4 ${verdict.tone === "destructive" ? "text-destructive" : verdict.tone === "warning" ? "text-warning" : "text-success"}`} />
               <h2 className="text-sm font-semibold">Risk Score</h2>
             </div>
 
             <div className="my-4 flex items-center justify-center">
-              <RiskDial score={18} />
+              <RiskDial score={score} />
             </div>
 
-            <div className="flex items-center justify-center gap-2 rounded-lg bg-destructive/15 px-3 py-2.5 ring-1 ring-destructive/40">
-              <AlertOctagon className="h-5 w-5 text-destructive" />
-              <span className="text-base font-bold tracking-wider text-destructive">NO-GO</span>
+            <div className={`flex items-center justify-center gap-2 rounded-lg px-3 py-2.5 ring-1 ${
+              verdict.tone === "destructive"
+                ? "bg-destructive/15 ring-destructive/40"
+                : verdict.tone === "warning"
+                  ? "bg-warning/15 ring-warning/40"
+                  : "bg-success/15 ring-success/40"
+            }`}>
+              <AlertOctagon className={`h-5 w-5 ${
+                verdict.tone === "destructive" ? "text-destructive" : verdict.tone === "warning" ? "text-warning" : "text-success"
+              }`} />
+              <span className={`text-base font-bold tracking-wider ${
+                verdict.tone === "destructive" ? "text-destructive" : verdict.tone === "warning" ? "text-warning" : "text-success"
+              }`}>{verdict.label}</span>
             </div>
 
             <ul className="mt-4 space-y-1.5 text-[11px]">
-              <li className="flex justify-between"><span className="text-muted-foreground">Demand</span><span className="text-warning">42</span></li>
-              <li className="flex justify-between"><span className="text-muted-foreground">Financial</span><span className="text-destructive">12</span></li>
-              <li className="flex justify-between"><span className="text-muted-foreground">Sponsor</span><span className="text-warning">38</span></li>
-              <li className="flex justify-between"><span className="text-muted-foreground">Exit</span><span className="text-destructive">15</span></li>
+              <li className="flex justify-between"><span className="text-muted-foreground">Flags</span><span className="text-foreground">{uiFlags.length}</span></li>
+              <li className="flex justify-between"><span className="text-muted-foreground">Critical</span><span className="text-destructive">{countFlags(uiFlags, "high")}</span></li>
+              <li className="flex justify-between"><span className="text-muted-foreground">Medium</span><span className="text-warning">{countFlags(uiFlags, "med")}</span></li>
+              <li className="flex justify-between"><span className="text-muted-foreground">Year-1 NOI</span><span className="text-foreground">${year1Noi(engine.deal).toLocaleString()}</span></li>
             </ul>
           </section>
         </aside>
@@ -265,24 +481,36 @@ function Dashboard() {
               <div className="flex items-center gap-2">
                 <AlertTriangle className="h-4 w-4 text-warning" />
                 <h2 className="text-sm font-semibold">Why-Not Panel</h2>
+                {ruleJustifications.length > 0 && (
+                  <span className="rounded-full bg-warning/15 px-2 py-0.5 text-[10px] font-medium text-warning">
+                    {ruleJustifications.length} {ruleJustifications.length === 1 ? "flag" : "flags"}
+                  </span>
+                )}
               </div>
               {whyNotOpen ? <ChevronDown className="h-4 w-4 text-muted-foreground" /> : <ChevronRight className="h-4 w-4 text-muted-foreground" />}
             </button>
             {whyNotOpen && (
               <div className="space-y-3 p-4">
-                <div className="rounded-lg bg-elevated p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Selected flag</div>
-                  <div className="mt-1 text-sm font-semibold">{activeFlag.title}</div>
-                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{activeFlag.body}</p>
-                </div>
-                <div className="rounded-lg bg-elevated p-3">
-                  <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Linked metric · {activeMetric.label}</div>
-                  <div className="mt-1 flex items-baseline gap-2">
-                    <span className="text-lg font-semibold">{activeMetric.value}</span>
-                    <span className="text-[11px] text-muted-foreground">{activeMetric.delta}</span>
+                <ul className="space-y-2">
+                  {ruleJustifications.map((text, idx) => (
+                    <li key={idx} className="flex gap-2 rounded-lg bg-elevated p-3 text-xs leading-relaxed text-muted-foreground">
+                      <span className="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-warning/15 text-[10px] font-semibold text-warning">
+                        {idx + 1}
+                      </span>
+                      <span>{text}</span>
+                    </li>
+                  ))}
+                </ul>
+                {activeFlag && activeMetric && (
+                  <div className="rounded-lg bg-elevated p-3">
+                    <div className="text-[11px] uppercase tracking-wide text-muted-foreground">Selected flag · {activeMetric.label}</div>
+                    <div className="mt-1 text-sm font-semibold">{activeFlag.title}</div>
+                    <div className="mt-1 flex items-baseline gap-2">
+                      <span className="text-lg font-semibold">{activeMetric.value}</span>
+                      <span className="text-[11px] text-muted-foreground">{activeMetric.delta}</span>
+                    </div>
                   </div>
-                  <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{activeMetric.detail}</p>
-                </div>
+                )}
               </div>
             )}
           </div>
@@ -334,9 +562,9 @@ function Dashboard() {
                 <DollarSign className="h-3.5 w-3.5" /> Deal economics
               </div>
               <ul className="mt-2 space-y-1 text-[11px]">
-                <li className="flex justify-between"><span className="text-muted-foreground">Price / unit</span><span>$184,800</span></li>
-                <li className="flex justify-between"><span className="text-muted-foreground">Going-in cap</span><span>4.6%</span></li>
-                <li className="flex justify-between"><span className="text-muted-foreground">UW IRR</span><span>16.4%</span></li>
+                <li className="flex justify-between"><span className="text-muted-foreground">NOI / unit</span><span>${Math.round(engine.deal.derived_metrics?.noi_per_unit_usd ?? 0).toLocaleString()}</span></li>
+                <li className="flex justify-between"><span className="text-muted-foreground">Reno / unit</span><span>${Math.round(engine.deal.derived_metrics?.reno_cost_per_unit_usd ?? 0).toLocaleString()}</span></li>
+                <li className="flex justify-between"><span className="text-muted-foreground">Year-1 NOI</span><span>${year1Noi(engine.deal).toLocaleString()}</span></li>
               </ul>
             </div>
           </div>
