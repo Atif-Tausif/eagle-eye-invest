@@ -36,6 +36,7 @@ class NegotiationOpportunity:
     suggested_price_reduction_low_usd: int
     suggested_price_reduction_high_usd: int
     confidence_pct: float
+    rationale: str
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)
@@ -72,6 +73,13 @@ def _interior_renovation_opportunity(deal: dict[str, Any]) -> NegotiationOpportu
         suggested_price_reduction_low_usd=round(capex * 0.70),
         suggested_price_reduction_high_usd=round(capex * 1.00),
         confidence_pct=95.0,
+        rationale=(
+            f"The OM discloses a ${capex:,.0f} interior renovation budget — capital the buyer "
+            f"will fund post-close to bring units to pro-forma condition. Since this reflects "
+            f"deferred unit condition rather than buyer-side upside, it's reasonable to ask the "
+            f"seller to credit 70-100% of this budget at closing instead of the buyer absorbing "
+            f"the full cost on top of the purchase price."
+        ),
     )
 
 
@@ -103,6 +111,13 @@ def _dscr_shortfall_opportunity(
         suggested_price_reduction_low_usd=round(price_reduction * 0.85),
         suggested_price_reduction_high_usd=round(price_reduction * 1.05),
         confidence_pct=90.0,
+        rationale=(
+            f"Year-1 DSCR is {dscr:.2f}x against a {DSCR_MEDIUM_THRESHOLD:.2f}x lender covenant, "
+            f"a ${debt_service_gap:,.0f} annual debt-service shortfall at the assumed "
+            f"{debt_rate * 100:.2f}% rate. Reducing the purchase price (and therefore the loan "
+            f"amount) by roughly ${price_reduction:,.0f} would right-size the debt service to "
+            f"clear the covenant without changing in-place NOI assumptions."
+        ),
     )
 
 

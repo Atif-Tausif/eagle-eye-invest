@@ -524,7 +524,10 @@ function Dashboard() {
                   return (
                     <li key={f.id}>
                       <button
-                        onClick={() => { setSelectedFlag(f.id); setSelectedMetric(f.linkedMetric); }}
+                        onClick={() => {
+                          setSelectedFlag(active ? "" : f.id);
+                          setSelectedMetric(f.linkedMetric);
+                        }}
                         className={`flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-elevated ${active ? "bg-elevated" : ""}`}
                       >
                         <AlertTriangle className={`mt-0.5 h-4 w-4 shrink-0 ${sev.c}`} />
@@ -533,9 +536,13 @@ function Dashboard() {
                             <span className={`rounded px-1.5 py-0.5 text-[10px] font-semibold ${sev.bg} ${sev.c}`}>{sev.label}</span>
                             <span className="truncate text-sm font-medium">{f.title}</span>
                           </div>
-                          <p className="mt-1 line-clamp-1 text-xs text-muted-foreground">{f.body}</p>
+                          <p className={`mt-1 text-xs text-muted-foreground ${active ? "" : "line-clamp-1"}`}>{f.body}</p>
                         </div>
-                        <ChevronRight className="mt-1 h-4 w-4 text-muted-foreground" />
+                        {active ? (
+                          <ChevronDown className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                        ) : (
+                          <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                        )}
                       </button>
                     </li>
                   );

@@ -1,4 +1,4 @@
-import { ChevronRight, Handshake } from "lucide-react";
+import { ChevronDown, ChevronRight, Handshake } from "lucide-react";
 import type { NegotiationOpportunity } from "@/lib/negotiation-engine";
 
 function formatUsd(value: number): string {
@@ -43,7 +43,7 @@ export function NegotiationOpportunities({
             <li key={opp.id}>
               <button
                 type="button"
-                onClick={() => onSelect?.(opp.id)}
+                onClick={() => onSelect?.(active ? "" : opp.id)}
                 className={`flex w-full items-start gap-3 px-4 py-3 text-left transition hover:bg-elevated ${active ? "bg-elevated" : ""}`}
               >
                 <Handshake className={`mt-0.5 h-4 w-4 shrink-0 ${conf.c}`} />
@@ -62,8 +62,17 @@ export function NegotiationOpportunities({
                     {formatUsd(opp.suggested_price_reduction_high_usd)} price reduction
                   </p>
                 </div>
-                <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                {active ? (
+                  <ChevronDown className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                ) : (
+                  <ChevronRight className="mt-1 h-4 w-4 shrink-0 text-muted-foreground" />
+                )}
               </button>
+              {active && (
+                <div className="px-4 pb-3 pl-11 text-xs leading-relaxed text-muted-foreground">
+                  {opp.rationale}
+                </div>
+              )}
             </li>
           );
         })}

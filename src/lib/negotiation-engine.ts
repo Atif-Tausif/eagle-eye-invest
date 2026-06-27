@@ -23,6 +23,7 @@ export interface NegotiationOpportunity {
   suggested_price_reduction_low_usd: number;
   suggested_price_reduction_high_usd: number;
   confidence_pct: number;
+  rationale: string;
 }
 
 export interface NegotiationPayload {
@@ -43,6 +44,12 @@ function interiorRenovationOpportunity(deal: DealPayload): NegotiationOpportunit
     suggested_price_reduction_low_usd: Math.round(capex * 0.7),
     suggested_price_reduction_high_usd: Math.round(capex * 1.0),
     confidence_pct: 95,
+    rationale:
+      `The OM discloses a $${capex.toLocaleString()} interior renovation budget — capital the ` +
+      `buyer will fund post-close to bring units to pro-forma condition. Since this reflects ` +
+      `deferred unit condition rather than buyer-side upside, it's reasonable to ask the seller ` +
+      `to credit 70-100% of this budget at closing instead of the buyer absorbing the full cost ` +
+      `on top of the purchase price.`,
   };
 }
 
@@ -67,6 +74,13 @@ function dscrShortfallOpportunity(
     suggested_price_reduction_low_usd: Math.round(priceReduction * 0.85),
     suggested_price_reduction_high_usd: Math.round(priceReduction * 1.05),
     confidence_pct: 90,
+    rationale:
+      `Year-1 DSCR is ${dscr.toFixed(2)}x against a ${DSCR_MEDIUM_THRESHOLD.toFixed(2)}x lender ` +
+      `covenant, a $${Math.round(debtServiceGap).toLocaleString()} annual debt-service shortfall ` +
+      `at the assumed ${(debtRate * 100).toFixed(2)}% rate. Reducing the purchase price (and ` +
+      `therefore the loan amount) by roughly $${Math.round(priceReduction).toLocaleString()} ` +
+      `would right-size the debt service to clear the covenant without changing in-place NOI ` +
+      `assumptions.`,
   };
 }
 
