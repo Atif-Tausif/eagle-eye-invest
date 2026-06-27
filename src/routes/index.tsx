@@ -1090,3 +1090,148 @@ function RiskDial({ score }: { score: number }) {
     </div>
   );
 }
+
+function ExecutiveSummaryCard({ data }: { data: ExecutiveSummary }) {
+  const toneStyles =
+    data.tone === "destructive"
+      ? {
+          ring: "border-destructive/40",
+          chip: "bg-destructive/15 text-destructive ring-destructive/40",
+          accent: "text-destructive",
+          bar: "bg-destructive",
+        }
+      : data.tone === "warning"
+        ? {
+            ring: "border-warning/40",
+            chip: "bg-warning/15 text-warning ring-warning/40",
+            accent: "text-warning",
+            bar: "bg-warning",
+          }
+        : {
+            ring: "border-success/40",
+            chip: "bg-success/15 text-success ring-success/40",
+            accent: "text-success",
+            bar: "bg-success",
+          };
+  const hasAdjustment = data.adjustmentLow > 0 || data.adjustmentHigh > 0;
+  const fmt = (n: number) =>
+    n >= 1_000_000 ? `$${(n / 1_000_000).toFixed(2)}M` : `$${Math.round(n).toLocaleString()}`;
+
+  return (
+    <div className={`rounded-xl border bg-panel p-5 ${toneStyles.ring}`}>
+      <div className="flex items-center gap-2">
+        <Sparkles className={`h-4 w-4 ${toneStyles.accent}`} />
+        <h2 className="text-sm font-semibold">Executive Summary</h2>
+        <span className="ml-2 text-[11px] text-muted-foreground">AI-generated overview</span>
+      </div>
+
+      <div className="mt-4 grid gap-4 md:grid-cols-12">
+        <div className="md:col-span-3 flex flex-col gap-3">
+          <div
+            className={`flex items-center justify-between gap-2 rounded-lg px-3 py-3 ring-1 ${toneStyles.chip}`}
+          >
+            <div className="text-[10px] uppercase tracking-wider opacity-80">Recommendation</div>
+            <div className="text-xl font-bold tracking-wider">{data.recommendation}</div>
+          </div>
+          <div className="rounded-lg bg-elevated p-3">
+            <div className="flex items-center justify-between text-[10px] uppercase tracking-wider text-muted-foreground">
+              <span className="inline-flex items-center gap-1">
+                <Gauge className="h-3 w-3" /> Confidence
+              </span>
+              <span className={`text-sm font-semibold ${toneStyles.accent}`}>
+                {data.confidence}%
+              </span>
+            </div>
+            <div className="mt-2 h-1.5 w-full overflow-hidden rounded-full bg-background">
+              <div
+                className={`h-full ${toneStyles.bar}`}
+                style={{ width: `${data.confidence}%` }}
+              />
+            </div>
+          </div>
+          <div className="rounded-lg bg-elevated p-3">
+            <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+              <DollarSign className="h-3 w-3" /> Suggested price adjustment
+            </div>
+            <div className="mt-1 text-base font-semibold text-foreground">
+              {hasAdjustment
+                ? `${fmt(data.adjustmentLow)} – ${fmt(data.adjustmentHigh)}`
+                : "No adjustment required"}
+            </div>
+            <div className="mt-0.5 text-[11px] text-muted-foreground">
+              {hasAdjustment ? "Off list price (negotiation range)" : "Deal screens within tolerance"}
+            </div>
+          </div>
+        </div>
+
+        <div className="md:col-span-5 rounded-lg bg-elevated p-3">
+          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+            <Target className="h-3 w-3" /> Top 3 reasons
+          </div>
+          <ol className="mt-2 space-y-2">
+            {data.reasons.map((r, i) => (
+              <li key={i} className="flex items-start gap-2 text-xs leading-relaxed">
+                <span
+                  className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-semibold ${toneStyles.chip}`}
+                >
+                  {i + 1}
+                </span>
+                <span className="text-foreground/90">{r}</span>
+              </li>
+            ))}
+          </ol>
+        </div>
+
+        <div className="md:col-span-4 rounded-lg bg-elevated p-3">
+          <div className="flex items-center gap-1.5 text-[10px] uppercase tracking-wider text-muted-foreground">
+            <FileText className="h-3 w-3" /> Investment summary
+          </div>
+          <p className="mt-2 text-xs leading-relaxed text-muted-foreground">{data.summary}</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AnalyzeOverlay({ step }: { step: number }) {
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/85 backdrop-blur-sm">
+      <div className="w-[min(440px,92vw)] rounded-xl border border-border bg-panel p-6 shadow-2xl">
+        <div className="flex items-center gap-2">
+          <Sparkles className="h-4 w-4 text-primary" />
+          <h2 className="text-sm font-semibold">AI Deal Analysis</h2>
+        </div>
+        <p className="mt-1 text-[11px] text-muted-foreground">
+          Working through the offering memorandum…
+        </p>
+        <ul className="mt-4 space-y-2">
+          {ANALYZE_STEPS.map((label, idx) => {
+            const isDone = idx < step;
+            const isActive = idx === step;
+            return (
+              <li
+                key={label}
+                className={`flex items-center gap-2.5 rounded-md px-2.5 py-1.5 text-xs ${
+                  isActive
+                    ? "bg-primary/10 text-foreground"
+                    : isDone
+                      ? "text-foreground/80"
+                      : "text-muted-foreground/60"
+                }`}
+              >
+                {isDone ? (
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" />
+                ) : isActive ? (
+                  <Loader2 className="h-3.5 w-3.5 shrink-0 animate-spin text-primary" />
+                ) : (
+                  <span className="h-3.5 w-3.5 shrink-0 rounded-full border border-border" />
+                )}
+                <span>{label}</span>
+              </li>
+            );
+          })}
+        </ul>
+      </div>
+    </div>
+  );
+}
