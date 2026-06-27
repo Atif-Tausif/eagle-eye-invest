@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Upload,
   ArrowRight,
@@ -211,6 +211,7 @@ function Dashboard() {
   const [selectedFlag, setSelectedFlag] = useState<string>("");
   const [whyNotOpen, setWhyNotOpen] = useState(true);
   const [activeMemo, setActiveMemo] = useState<string>("financial");
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [dragOver, setDragOver] = useState(false);
   const [files, setFiles] = useState<string[]>([]);
   const [pendingFile, setPendingFile] = useState<File | null>(null);
@@ -296,19 +297,33 @@ function Dashboard() {
   const location = engine?.deal.property_metadata?.location ?? "";
   const submarket = engine?.deal.market_context?.submarket ?? "";
 
-  const onDrop = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-    setDragOver(false);
-    const dropped = Array.from(e.dataTransfer.files);
-    const pdf = dropped.find((f) => f.name.toLowerCase().endsWith(".pdf"));
+  const acceptFiles = useCallback((incoming: File[]) => {
+    const pdf = incoming.find((f) => f.name.toLowerCase().endsWith(".pdf"));
     setAnalyzeError(null);
     if (pdf) {
       setPendingFile(pdf);
       setFiles((prev) => [...prev, pdf.name]);
-    } else if (dropped.length) {
+    } else if (incoming.length) {
       setAnalyzeError("Only PDF Offering Memoranda are supported right now");
     }
   }, []);
+
+  const onDrop = useCallback(
+    (e: React.DragEvent) => {
+      e.preventDefault();
+      setDragOver(false);
+      acceptFiles(Array.from(e.dataTransfer.files));
+    },
+    [acceptFiles],
+  );
+
+  const onFileInputChange = useCallback(
+    (e: React.ChangeEvent<HTMLInputElement>) => {
+      acceptFiles(Array.from(e.target.files ?? []));
+      e.target.value = "";
+    },
+    [acceptFiles],
+  );
 
   const exportMemo = useCallback(async () => {
     setExporting(true);
@@ -397,14 +412,25 @@ function Dashboard() {
               <Upload className="h-4 w-4 text-primary" />
               <h2 className="text-sm font-semibold">Deal Ingestion Hub</h2>
             </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".pdf,application/pdf"
+              onChange={onFileInputChange}
+              className="hidden"
+            />
             <div
+              role="button"
+              tabIndex={0}
+              onClick={() => fileInputRef.current?.click()}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") fileInputRef.current?.click(); }}
               onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
               onDragLeave={() => setDragOver(false)}
               onDrop={onDrop}
-              className={`rounded-lg border-2 border-dashed p-6 text-center transition ${dragOver ? "border-primary bg-primary/10" : "border-border bg-background/50"}`}
+              className={`cursor-pointer rounded-lg border-2 border-dashed p-6 text-center transition ${dragOver ? "border-primary bg-primary/10" : "border-border bg-background/50"}`}
             >
               <Upload className="mx-auto mb-2 h-6 w-6 text-muted-foreground" />
-              <p className="text-xs font-medium">Drop an Offering Memorandum</p>
+              <p className="text-xs font-medium">Drop or click to select an Offering Memorandum</p>
               <p className="mt-1 text-[11px] text-muted-foreground">PDF only, up to 50 MB</p>
             </div>
 
