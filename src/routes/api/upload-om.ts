@@ -12,8 +12,8 @@ const GROQ_MODEL = "llama-3.3-70b-versatile";
 
 async function extractPdfPages(bytes: Uint8Array): Promise<string[]> {
   const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs" as string);
-  // Disable the web worker — not available in Node.js
-  (pdfjsLib as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc = "";
+
+// Running on the server (Node), so don't use a worker.
 
   const loadingTask = (
     pdfjsLib as {
@@ -171,18 +171,33 @@ async function extractMetadata(coverText: string): Promise<{
   location: string | null;
 }> {
   const fallback = extractMetadataWithRegex(coverText);
-  const prompt = `Extract property metadata from this Offering Memorandum cover page text.
+const prompt = `You are a senior Commercial Real Estate underwriting analyst.
 
-Return JSON with exactly these keys:
+The document below is an Offering Memorandum converted into Markdown.
+
+Markdown preserves headings and structure from the PDF.
+
+Extract ONLY factual information.
+
+Return ONLY valid JSON.
+
+Never explain your reasoning.
+
+If a value is not present, return null.
+
+Return exactly:
+
 {
-  "property_name": "<full property name or null>",
-  "unit_count": <integer number of units or null>,
-  "asset_type": "<e.g. Apartment Community or null>",
-  "location": "<city, state or null>"
+  "property_name": string | null,
+  "unit_count": number | null,
+  "asset_type": string | null,
+  "location": string | null
 }
 
-Cover page text:
-${coverText.slice(0, 4000)}`;
+Markdown:
+
+${coverText.slice(0, 4000)}
+`;
 
   const raw = await callGroq(prompt);
   try {
@@ -197,17 +212,27 @@ async function extractFinancials(financialsText: string): Promise<{
   interior_renovation_budget_usd: number | null;
 }> {
   const fallback = extractFinancialsWithRegex(financialsText);
-  const prompt = `Extract Year 1 financial figures from this Offering Memorandum pro forma table text.
+const prompt = `You are an expert Commercial Real Estate underwriting analyst.
 
-Return JSON with exactly these keys (integer dollar amounts, renovation budgets are typically negative):
+The document below is an Offering Memorandum converted into Markdown.
+
+Extract ONLY the Year 1 financial values.
+
+Return ONLY valid JSON.
+
+Never explain your reasoning.
+
+Return exactly:
+
 {
-  "net_operating_income_usd": <Year 1 NOI as integer or null>,
-  "interior_renovation_budget_usd": <renovation/CapEx budget as negative integer or null>
+  "net_operating_income_usd": number | null,
+  "interior_renovation_budget_usd": number | null
 }
 
-Pro forma text:
-${financialsText.slice(0, 4000)}`;
+Markdown:
 
+${financialsText.slice(0, 4000)}
+`;
   const raw = await callGroq(prompt);
   try {
     return { ...fallback, ...JSON.parse(raw) };
@@ -215,6 +240,16 @@ ${financialsText.slice(0, 4000)}`;
     return fallback;
   }
 }
+function toMarkdown(title: string, text: string): string {
+            return `# ${title}
+            
+
+          ${text
+            .split(/\n+/)
+            .map((line) => line.trim())
+            .filter(Boolean)
+            .join("\n\n")}`;
+          }
 
 // ---------------------------------------------------------------------------
 // Route
@@ -254,11 +289,18 @@ export const Route = createFileRoute("/api/upload-om")({
 
           const { cover, financials } = selectRelevantPages(pages);
 
+          const coverMarkdown = toMarkdown("Property Information", cover);
+
+          const financialMarkdown = toMarkdown(
+            "Financial Statements",
+            financials
+          );
+
           // 2. Call Groq — two sequential requests to stay within token limits
           const [meta, fins] = await Promise.all([
-            extractMetadata(cover).catch(() => extractMetadataWithRegex(cover)),
+            extractMetadata(coverMarkdown).catch(() => extractMetadataWithRegex(cover)),
             financials
-              ? extractFinancials(financials).catch(() => extractFinancialsWithRegex(financials))
+              ? extractFinancials(financialMarkdown).catch(() => extractFinancialsWithRegex(financials))
               : Promise.resolve({
                   net_operating_income_usd: null,
                   interior_renovation_budget_usd: null,
