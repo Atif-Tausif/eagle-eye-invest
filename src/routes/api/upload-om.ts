@@ -1,72 +1,19 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { getMarketContext } from "@/lib/market-data";
-import { evaluateDeal } from "@/lib/risk-engine";
-// ?url tells Vite to resolve this to a public asset URL at build time,
-// which is the value pdfjs needs for GlobalWorkerOptions.workerSrc
-import pdfWorkerUrl from "pdfjs-dist/legacy/build/pdf.worker.mjs?url";
+
+// PDF extraction now happens client-side (browser has real web workers).
+// This route receives pre-extracted text sections and calls Groq.
 
 const GROQ_API_KEY = typeof process !== "undefined" && process.env.GROQ_API_KEY;
 const GROQ_URL = "https://api.groq.com/openai/v1/chat/completions";
 const GROQ_MODEL = "llama-3.3-70b-versatile";
 
 // ---------------------------------------------------------------------------
-// PDF text extraction (pdfjs-dist, Node.js / Nitro compatible)
-// ---------------------------------------------------------------------------
-
-async function extractPdfPages(bytes: Uint8Array): Promise<string[]> {
-  const pdfjsLib = await import("pdfjs-dist/legacy/build/pdf.mjs" as string);
-  (pdfjsLib as { GlobalWorkerOptions: { workerSrc: string } }).GlobalWorkerOptions.workerSrc = pdfWorkerUrl;
-
-  const loadingTask = (
-    pdfjsLib as {
-      getDocument: (opts: { data: Uint8Array }) => {
-        promise: Promise<{
-          numPages: number;
-          getPage: (
-            n: number,
-          ) => Promise<{ getTextContent: () => Promise<{ items: Array<{ str?: string }> }> }>;
-        }>;
-      };
-    }
-  ).getDocument({ data: bytes });
-
-  const pdf = await loadingTask.promise;
-  const pages: string[] = [];
-
-  for (let i = 1; i <= pdf.numPages; i++) {
-    const page = await pdf.getPage(i);
-    const content = await page.getTextContent();
-    const text = content.items
-      .map((item) => item.str ?? "")
-      .join(" ")
-      .replace(/\s+/g, " ")
-      .trim();
-    if (text.length > 20) pages.push(text);
-  }
-  return pages;
-}
-
-// Pick the pages most relevant to extraction (cover + financials)
-function selectRelevantPages(pages: string[]): { cover: string; financials: string } {
-  const cover = pages.slice(0, 3).join("\n\n---\n\n");
-
-  const finKeywords = /net\s+operating\s+income|NOI|pro\s+forma|renovation|capital\s+expenditure/i;
-  const finPages = pages.filter((p) => finKeywords.test(p));
-  // Prefer pages that mention Year 1 values
-  const year1Pages = finPages.filter((p) => /year\s*1|yr\.?\s*1/i.test(p));
-  const financials = (year1Pages.length ? year1Pages : finPages).slice(0, 4).join("\n\n---\n\n");
-
-  return { cover, financials };
-}
-
-// ---------------------------------------------------------------------------
 // Groq API call with rate-limit retry
 // ---------------------------------------------------------------------------
 
 async function callGroq(userPrompt: string, retries = 4): Promise<string> {
-  if (!GROQ_API_KEY) {
-    throw new Error("GROQ_API_KEY is not configured");
-  }
+  if (!GROQ_API_KEY) throw new Error("GROQ_API_KEY is not configured");
 
   for (let attempt = 0; attempt < retries; attempt++) {
     const res = await fetch(GROQ_URL, {
@@ -91,7 +38,6 @@ async function callGroq(userPrompt: string, retries = 4): Promise<string> {
     });
 
     if (res.status === 429) {
-      // Respect Retry-After header; default to 60 s if absent
       const retryAfter = parseInt(res.headers.get("retry-after") ?? "60", 10);
       await new Promise((r) => setTimeout(r, retryAfter * 1000));
       continue;
@@ -109,7 +55,7 @@ async function callGroq(userPrompt: string, retries = 4): Promise<string> {
 }
 
 // ---------------------------------------------------------------------------
-// Extraction prompts
+// Regex fallbacks (used when Groq is unavailable or returns bad JSON)
 // ---------------------------------------------------------------------------
 
 function parseMoney(value: string | undefined): number | null {
@@ -122,12 +68,7 @@ function parseMoney(value: string | undefined): number | null {
   return Math.round(parsed) * (negative ? -1 : 1);
 }
 
-function extractMetadataWithRegex(text: string): {
-  property_name: string | null;
-  unit_count: number | null;
-  asset_type: string | null;
-  location: string | null;
-} {
+function regexMetadata(text: string) {
   const unitMatch = text.match(/(\d{2,5})\s*(?:-|\s)?\s*unit/i);
   const assetMatch = text.match(/\b(apartment community|multifamily|garden apartments?)\b/i);
   const locationMatch = text.match(
@@ -136,7 +77,6 @@ function extractMetadataWithRegex(text: string): {
   const titleMatch =
     text.match(/([A-Z][A-Za-z0-9&,' -]+(?:Apartment|Apartments|Community)[A-Za-z0-9&,' -]*)/) ??
     text.match(/([A-Z][A-Za-z0-9&,' -]{12,80})/);
-
   return {
     property_name: titleMatch?.[1]?.trim() ?? null,
     unit_count: unitMatch ? Number.parseInt(unitMatch[1], 10) : null,
@@ -145,116 +85,51 @@ function extractMetadataWithRegex(text: string): {
   };
 }
 
-function extractFinancialsWithRegex(text: string): {
-  net_operating_income_usd: number | null;
-  interior_renovation_budget_usd: number | null;
-} {
+function regexFinancials(text: string) {
   const money = String.raw`(\(?-?\$?\s*\d[\d,]*(?:\.\d+)?\)?)`;
   const noiMatch =
     text.match(new RegExp(`net\\s+operating\\s+income[^$()\\d-]{0,80}${money}`, "i")) ??
     text.match(new RegExp(`\\bNOI\\b[^$()\\d-]{0,80}${money}`, "i"));
   const renoMatch =
     text.match(new RegExp(`interior\\s+renovation[^$()\\d-]{0,80}${money}`, "i")) ??
-    text.match(
-      new RegExp(`(?:renovation|capex|capital\\s+expenditure)[^$()\\d-]{0,80}${money}`, "i"),
-    );
+    text.match(new RegExp(`(?:renovation|capex|capital\\s+expenditure)[^$()\\d-]{0,80}${money}`, "i"));
   const reno = parseMoney(renoMatch?.[1]);
-
   return {
     net_operating_income_usd: parseMoney(noiMatch?.[1]),
     interior_renovation_budget_usd: reno == null ? null : -Math.abs(reno),
   };
 }
 
-async function extractMetadata(coverText: string): Promise<{
-  property_name: string | null;
-  unit_count: number | null;
-  asset_type: string | null;
-  location: string | null;
-}> {
-  const fallback = extractMetadataWithRegex(coverText);
-const prompt = `You are a senior Commercial Real Estate underwriting analyst.
+// ---------------------------------------------------------------------------
+// Groq extraction
+// ---------------------------------------------------------------------------
 
-The document below is an Offering Memorandum converted into Markdown.
-
-Markdown preserves headings and structure from the PDF.
-
-Extract ONLY factual information.
-
-Return ONLY valid JSON.
-
-Never explain your reasoning.
-
-If a value is not present, return null.
-
-Return exactly:
-
-{
-  "property_name": string | null,
-  "unit_count": number | null,
-  "asset_type": string | null,
-  "location": string | null
-}
-
-Markdown:
-
-${coverText.slice(0, 4000)}
-`;
-
-  const raw = await callGroq(prompt);
+async function extractMetadata(coverText: string) {
+  const fallback = regexMetadata(coverText);
   try {
+    const raw = await callGroq(
+      `Extract property metadata from this Offering Memorandum text.\n\nReturn JSON with exactly these keys:\n{\n  "property_name": string | null,\n  "unit_count": number | null,\n  "asset_type": string | null,\n  "location": string | null\n}\n\nText:\n${coverText.slice(0, 4000)}`,
+    );
     return { ...fallback, ...JSON.parse(raw) };
   } catch {
     return fallback;
   }
 }
 
-async function extractFinancials(financialsText: string): Promise<{
-  net_operating_income_usd: number | null;
-  interior_renovation_budget_usd: number | null;
-}> {
-  const fallback = extractFinancialsWithRegex(financialsText);
-const prompt = `You are an expert Commercial Real Estate underwriting analyst.
-
-The document below is an Offering Memorandum converted into Markdown.
-
-Extract ONLY the Year 1 financial values.
-
-Return ONLY valid JSON.
-
-Never explain your reasoning.
-
-Return exactly:
-
-{
-  "net_operating_income_usd": number | null,
-  "interior_renovation_budget_usd": number | null
-}
-
-Markdown:
-
-${financialsText.slice(0, 4000)}
-`;
-  const raw = await callGroq(prompt);
+async function extractFinancials(financialsText: string) {
+  const fallback = regexFinancials(financialsText);
   try {
+    const raw = await callGroq(
+      `Extract Year 1 financial figures from this Offering Memorandum pro forma text.\n\nReturn JSON with exactly these keys (renovation budgets are negative integers):\n{\n  "net_operating_income_usd": number | null,\n  "interior_renovation_budget_usd": number | null\n}\n\nText:\n${financialsText.slice(0, 4000)}`,
+    );
     return { ...fallback, ...JSON.parse(raw) };
   } catch {
     return fallback;
   }
 }
-function toMarkdown(title: string, text: string): string {
-            return `# ${title}
-            
-
-          ${text
-            .split(/\n+/)
-            .map((line) => line.trim())
-            .filter(Boolean)
-            .join("\n\n")}`;
-          }
 
 // ---------------------------------------------------------------------------
-// Route
+// Route — accepts { fileName, cover, financials } JSON from the client
 // ---------------------------------------------------------------------------
 
 export const Route = createFileRoute("/api/upload-om")({
@@ -262,72 +137,38 @@ export const Route = createFileRoute("/api/upload-om")({
     handlers: {
       POST: async ({ request }) => {
         try {
-          const formData = await request.formData();
-          const file = formData.get("file");
+          const body = (await request.json()) as {
+            fileName?: string;
+            cover?: string;
+            financials?: string;
+          };
 
-          if (!(file instanceof File)) {
-            return new Response(JSON.stringify({ error: "No file uploaded" }), {
+          if (!body.cover) {
+            return new Response(JSON.stringify({ error: "No extracted text provided" }), {
               status: 400,
               headers: { "Content-Type": "application/json" },
             });
           }
-          if (!file.name.toLowerCase().endsWith(".pdf")) {
-            return new Response(JSON.stringify({ error: "Only PDF files are supported" }), {
-              status: 400,
-              headers: { "Content-Type": "application/json" },
-            });
-          }
 
-          // 1. Extract PDF text
-          const bytes = new Uint8Array(await file.arrayBuffer());
-          const pages = await extractPdfPages(bytes);
-
-          if (pages.length === 0) {
-            return new Response(JSON.stringify({ error: "Could not extract text from PDF" }), {
-              status: 422,
-              headers: { "Content-Type": "application/json" },
-            });
-          }
-
-          const { cover, financials } = selectRelevantPages(pages);
-
-          const coverMarkdown = toMarkdown("Property Information", cover);
-
-          const financialMarkdown = toMarkdown(
-            "Financial Statements",
-            financials
-          );
-
-          // 2. Call Groq — two sequential requests to stay within token limits
           const [meta, fins] = await Promise.all([
-            extractMetadata(coverMarkdown).catch(() => extractMetadataWithRegex(cover)),
-            financials
-              ? extractFinancials(financialMarkdown).catch(() => extractFinancialsWithRegex(financials))
-              : Promise.resolve({
-                  net_operating_income_usd: null,
-                  interior_renovation_budget_usd: null,
-                }),
+            extractMetadata(body.cover),
+            body.financials
+              ? extractFinancials(body.financials)
+              : Promise.resolve({ net_operating_income_usd: null, interior_renovation_budget_usd: null }),
           ]);
 
-          // 3. Derive metrics
           const noi = fins.net_operating_income_usd;
           const reno = fins.interior_renovation_budget_usd;
           const units = meta.unit_count;
 
           const derived: Record<string, number> = {};
           if (noi != null && reno != null) derived.net_cash_flow_after_capex_usd = noi + reno;
-          if (noi != null && units)
-            derived.noi_per_unit_usd = Math.round((noi / units) * 100) / 100;
-          if (reno != null && units)
-            derived.reno_cost_per_unit_usd = Math.round((Math.abs(reno) / units) * 100) / 100;
-
-          // 4. Merge with stub market data
-          const submarket = "DuPage County";
-          const marketContext = getMarketContext(submarket);
+          if (noi != null && units) derived.noi_per_unit_usd = Math.round((noi / units) * 100) / 100;
+          if (reno != null && units) derived.reno_cost_per_unit_usd = Math.round((Math.abs(reno) / units) * 100) / 100;
 
           const deal = {
             merged_at: new Date().toISOString(),
-            source_pdf: file.name,
+            source_pdf: body.fileName ?? "upload.pdf",
             property_metadata: meta,
             financial_projections: {
               year_1: { net_operating_income_usd: noi },
@@ -337,15 +178,15 @@ export const Route = createFileRoute("/api/upload-om")({
                 { label: "Interior Renovation Budget", year_1_usd: reno },
               ],
             },
-            market_context: marketContext,
+            market_context: getMarketContext("DuPage County"),
             derived_metrics: derived,
           };
 
-          return new Response(JSON.stringify(evaluateDeal(deal)), {
+          return new Response(JSON.stringify(deal), {
             headers: { "Content-Type": "application/json" },
           });
         } catch (err) {
-          const message = err instanceof Error ? err.message : "Failed to process uploaded OM";
+          const message = err instanceof Error ? err.message : "Failed to process OM";
           return new Response(JSON.stringify({ error: message }), {
             status: 500,
             headers: { "Content-Type": "application/json" },

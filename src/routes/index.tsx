@@ -25,8 +25,10 @@ import {
   Target,
   Lightbulb,
   Gauge,
+  X,
 } from "lucide-react";
 import { DealAiChat } from "@/components/deal-ai-chat";
+import { extractOmSections } from "@/lib/pdf-extract-client";
 import { NegotiationOpportunities } from "@/components/negotiation-opportunities";
 import type { DealPayload, EnginePayload, RiskFlag } from "@/lib/risk-engine";
 import {
@@ -407,9 +409,13 @@ function Dashboard() {
       setAnalyzeStep((s) => (s < ANALYZE_STEPS.length - 2 ? s + 1 : s));
     }, 700);
     try {
-      const formData = new FormData();
-      formData.append("file", pendingFile);
-      const res = await fetch("/api/upload-om", { method: "POST", body: formData });
+      // Extract text in the browser (avoids server-side pdfjs worker issues)
+      const { cover, financials } = await extractOmSections(pendingFile);
+      const res = await fetch("/api/upload-om", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ fileName: pendingFile.name, cover, financials }),
+      });
       if (!res.ok) {
         const err = await res.json().catch(() => ({}));
         throw new Error(err.error ?? `Failed to analyze deal (${res.status})`);
@@ -469,7 +475,10 @@ function Dashboard() {
     setAnalyzeError(null);
     if (pdf) {
       setPendingFile(pdf);
-      setFiles((prev) => [...prev, pdf.name]);
+      setFiles((prev) => {
+        const filtered = prev.filter((n) => n !== pdf.name);
+        return [...filtered, pdf.name];
+      });
     } else if (incoming.length) {
       setAnalyzeError("Only PDF Offering Memoranda are supported right now");
     }
@@ -619,8 +628,18 @@ function Dashboard() {
                   key={f}
                   className="flex items-center gap-2 rounded-md bg-elevated px-2.5 py-1.5 text-xs"
                 >
-                  <FileText className="h-3.5 w-3.5 text-muted-foreground" />
-                  <span className="truncate">{f}</span>
+                  <FileText className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+                  <span className="flex-1 truncate">{f}</span>
+                  <button
+                    onClick={() => {
+                      setFiles((prev) => prev.filter((n) => n !== f));
+                      if (pendingFile?.name === f) setPendingFile(null);
+                    }}
+                    className="shrink-0 rounded p-0.5 text-muted-foreground transition hover:text-destructive"
+                    aria-label="Remove file"
+                  >
+                    <X className="h-3.5 w-3.5" />
+                  </button>
                 </li>
               ))}
             </ul>
